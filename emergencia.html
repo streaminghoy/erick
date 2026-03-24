@@ -3,25 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Android</title>
+    <title>Test TURN Android</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
-<body style="background:black; color:white; font-family:Arial;">
-    <h1>Test Cámara Android</h1>
-    <button onclick="start()" style="font-size:20px; padding:20px;">INICIAR</button>
-    <video id="v" autoplay playsInline style="width:100%; height:300px; background:#333;"></video>
-    <div id="log" style="color:red; margin-top:20px;"></div>
+<body style="background:#000; color:#0f0; font-family:monospace; padding:20px;">
+    <h2>Test Conexión TURN</h2>
+    <div id="log"></div>
 
     <script>
-        async function start() {
-            try {
-                document.getElementById('log').innerText = 'Pidiendo cámara...';
-                const s = await navigator.mediaDevices.getUserMedia({video:true, audio:true});
-                document.getElementById('v').srcObject = s;
-                document.getElementById('log').innerText = '¡Funciona! Ahora probá el código completo.';
-            } catch(e) {
-                document.getElementById('log').innerText = 'Error: ' + e.message;
-            }
-        }
+        const log = (msg) => {
+            document.getElementById('log').innerHTML += msg + '<br>';
+            console.log(msg);
+        };
+
+        const PEER_CONFIG = {
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { 
+                        urls: 'turn:140.82.25.249:3478',
+                        username: 'reportero',
+                        credential: 'mundial2026'
+                    }
+                ]
+            },
+            debug: 3 // Máximo debug
+        };
+
+        log('Creando peer...');
+        
+        const peer = new Peer('test-android-' + Date.now(), PEER_CONFIG);
+
+        peer.on('open', (id) => {
+            log('✅ Peer abierto: ' + id);
+            log('Probando ICE...');
+            
+            // Crear conexión de datos para forzar negociación ICE
+            const conn = peer.connect('test-dummy-' + Date.now());
+            
+            conn.on('open', () => {
+                log('✅ Conexión de datos abierta');
+            });
+            
+            conn.on('error', (err) => {
+                log('❌ Error conexión: ' + err);
+            });
+        });
+
+        peer.on('error', (err) => {
+            log('❌ ERROR PEER: ' + err.type + ' - ' + err.message);
+        });
+
+        peer.on('iceStateChange', (state) => {
+            log('ICE State: ' + state);
+        });
+
+        // Después de 10 segundos, mostrar candidatos ICE
+        setTimeout(() => {
+            log('--- Estado final ---');
+            log('Ver consola para más detalles (F12)');
+        }, 10000);
     </script>
 </body>
 </html>
