@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>StreamCall Mundial - Fixed</title>
+    <title>StreamCall - Retorno Video Corregido</title>
     
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -16,7 +15,7 @@
     <style>
         body { background-color: #050505; color: white; font-family: Arial, sans-serif; margin: 0; padding: 0; height: 100vh; overflow: hidden; }
         .lobby-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: #0f172a; padding: 20px; text-align: center; }
-        .glass-box { background: rgba(30, 41, 59, 0.8); padding: 40px; border-radius: 16px; border: 1px solid #334155; max-width: 400px; width: 100%; }
+        .glass-box { background: rgba(30, 41, 59, 0.8); padding: 40px; border-radius: 16px; max-width: 400px; width: 100%; border: 1px solid #334155; }
         input, select { width: 100%; background: #000; border: 2px solid #334155; color: white; padding: 15px; border-radius: 8px; font-size: 1rem; margin-bottom: 15px; text-align: center; }
         .btn { width: 100%; padding: 15px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; background: #3b82f6; color: white; font-size: 1.1rem; margin-bottom: 10px; }
         .btn-green { background: #10b981; color: black; }
@@ -41,18 +40,70 @@
         .t-btn.active-prev { background: rgba(34, 197, 94, 0.2); border-color: #22c55e; color: #22c55e; }
         .t-btn.active-live { background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #ef4444; }
         
+        /* Preview del Director (su propia cámara) */
+        .director-preview { 
+            position: fixed; 
+            bottom: 20px; 
+            right: 20px; 
+            width: 200px; 
+            height: 150px; 
+            background: #000; 
+            border: 2px solid #3b82f6; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            z-index: 1000;
+            display: none;
+        }
+        .director-preview.active { display: block; }
+        .director-preview video { width: 100%; height: 100%; object-fit: cover; }
+        .director-preview-label { 
+            position: absolute; 
+            bottom: 0; 
+            left: 0; 
+            right: 0; 
+            background: rgba(59, 130, 246, 0.8); 
+            color: white; 
+            text-align: center; 
+            font-size: 0.7rem; 
+            padding: 2px;
+        }
+
         .guest-layout { width: 100vw; height: 100vh; position: relative; background: #000; }
         .guest-video { width: 100%; height: 100%; object-fit: cover; }
         .guest-tally-border { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 15px solid transparent; pointer-events: none; z-index: 50; box-sizing: border-box; }
         .tally-live .guest-tally-border { border-color: #ef4444; box-shadow: inset 0 0 50px rgba(239,68,68,0.8); }
         .tally-prev .guest-tally-border { border-color: #22c55e; box-shadow: inset 0 0 50px rgba(34,197,94,0.8); }
         
-        .return-pip { position: absolute; top: 20px; left: 20px; width: 200px; height: 120px; background: #000; border: 2px solid #475569; border-radius: 12px; overflow: hidden; z-index: 80; display: none; }
+        .return-pip { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            width: 240px; 
+            height: 180px; 
+            background: #000; 
+            border: 3px solid #3b82f6; 
+            border-radius: 12px; 
+            overflow: hidden; 
+            z-index: 80; 
+            display: none;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
         .return-pip.active { display: block; }
         .return-pip video { width: 100%; height: 100%; object-fit: cover; }
-        .pip-label { position: absolute; bottom: 4px; left: 4px; background: rgba(0,0,0,0.8); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+        .pip-label { 
+            position: absolute; 
+            bottom: 0; 
+            left: 0; 
+            right: 0; 
+            background: rgba(59, 130, 246, 0.9); 
+            color: white; 
+            font-size: 12px; 
+            padding: 5px; 
+            text-align: center;
+            font-weight: bold;
+        }
         
-        .guest-overlay { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 12px 25px; border-radius: 50px; display: flex; gap: 15px; z-index: 100; }
+        .guest-overlay { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 12px 25px; border-radius: 50px; display: flex; gap: 15px; z-index: 100; border: 1px solid #334155; }
         .mic-btn { width: 50px; height: 50px; border-radius: 50%; border: none; background: #334155; color: white; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .mic-btn.off { background: #ef4444; }
         
@@ -91,7 +142,6 @@
             useEffect(() => {
                 if (videoRef.current && stream) {
                     videoRef.current.srcObject = stream;
-                    // IMPORTANTE: Intentar reproducir explícitamente
                     videoRef.current.play().catch(e => console.log("Play error:", e));
                 }
             }, [stream]);
@@ -131,10 +181,11 @@
                 3: { connected: false, tally: 'idle', stream: null } 
             });
             const [talkbackActive, setTalkbackActive] = useState(false);
+            const [localStream, setLocalStream] = useState(null); // Stream del director (video+audio)
+            
             const peer = useRef(null);
             const mqttClient = useRef(null);
-            const returnStreamRef = useRef(null);
-            const returnCallsRef = useRef({}); // Guardar referencias de llamadas de retorno
+            const returnCallsRef = useRef({});
 
             useEffect(() => {
                 mqttClient.current = mqtt.connect(MQTT_BROKER);
@@ -149,18 +200,12 @@
 
                 peer.current = new Peer(`sc_dir_${roomName}`, PEER_CONFIG);
                 
-                peer.current.on('open', (id) => {
-                    console.log('Director listo:', id);
-                });
-                
                 peer.current.on('call', (call) => {
                     const match = call.peer.match(/_(\d+)$/);
                     if (match) {
                         const slotId = match[1];
-                        console.log(`Llamada entrante de slot ${slotId}`);
-                        call.answer(); // Responder sin enviar stream propio aún
+                        call.answer(); 
                         call.on('stream', (stream) => {
-                            console.log(`Stream recibido de slot ${slotId}`);
                             setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], connected: true, stream: stream } }));
                         });
                         call.on('close', () => {
@@ -172,7 +217,7 @@
                 return () => { 
                     peer.current?.destroy(); 
                     mqttClient.current?.end(); 
-                    returnStreamRef.current?.getTracks().forEach(t => t.stop());
+                    localStream?.getTracks().forEach(t => t.stop());
                 };
             }, [roomName]);
 
@@ -185,25 +230,30 @@
                 if (talkbackActive) {
                     // Cortar IFB
                     Object.values(returnCallsRef.current).forEach(call => call?.close());
-                    returnStreamRef.current?.getTracks().forEach(t => t.stop());
+                    localStream?.getTracks().forEach(t => t.stop());
+                    setLocalStream(null);
                     setTalkbackActive(false);
                     returnCallsRef.current = {};
                 } else {
                     try {
-                        const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                        returnStreamRef.current = s;
+                        // IMPORTANTE: Pedir VIDEO y AUDIO del director
+                        const s = await navigator.mediaDevices.getUserMedia({ 
+                            audio: true, 
+                            video: { width: 640, height: 480 } // Video del director para el retorno
+                        });
+                        setLocalStream(s);
                         setTalkbackActive(true);
                         
-                        // Llamar a todos los móviles conectados para enviarles retorno
+                        // Enviar a todos los móviles conectados
                         [1,2,3].forEach(slotId => {
                             if (slots[slotId].connected) {
-                                console.log(`Enviando IFB a slot ${slotId}`);
+                                console.log(`Enviando video+audio a slot ${slotId}`);
                                 const returnCall = peer.current.call(`sc_guest_${roomName}_${slotId}`, s);
                                 returnCallsRef.current[slotId] = returnCall;
                             }
                         });
                     } catch(e) { 
-                        alert("Error accediendo al micrófono"); 
+                        alert("Error accediendo a cámara/micrófono: " + e.message);
                         console.error(e);
                     }
                 }
@@ -220,16 +270,23 @@
                     <div className="director-header">
                         <div>
                             <h2 style={{color: '#3b82f6', margin: 0}}>StreamCall MUNDIAL</h2>
-                            <span style={{color: '#94a3b8', fontSize: '0.8rem'}}>SALA: {roomName}</span>
+                            <span style={{color: '#94a3b8', fontSize: '0.8rem'}}>SALA: {roomName} | TURN: 140.82.25.249</span>
                         </div>
                         <button 
                             className={talkbackActive ? 'btn btn-red' : 'btn'} 
                             style={{width: 'auto', padding: '10px 20px'}} 
                             onClick={toggleReturnAll}
                         >
-                            {talkbackActive ? '🔴 CORTAR IFB' : '▶️ IFB GLOBAL'}
+                            {talkbackActive ? '🔴 CORTAR RETORNO' : '📹 ENVIAR VIDEO+AUDIO'}
                         </button>
                     </div>
+                    
+                    {/* Preview de la cámara del Director */}
+                    <div className={`director-preview ${localStream ? 'active' : ''}`}>
+                        {localStream && <VideoPlayer stream={localStream} muted={true} />}
+                        <div className="director-preview-label">TU CÁMARA (ENVIANDO)</div>
+                    </div>
+
                     <div className="grid-container">
                         {[1,2,3].map(slotId => (
                             <div key={slotId} className="slot-card" style={{borderColor: slots[slotId].tally === 'live' ? '#ef4444' : slots[slotId].tally === 'prev' ? '#22c55e' : '#334155'}}>
@@ -239,7 +296,7 @@
                                     ) : (
                                         <div className="slot-status">
                                             ESPERANDO MÓVIL {slotId}<br/>
-                                            <small style={{color: '#64748b'}}>TURN: 140.82.25.249</small>
+                                            <small style={{color: '#64748b'}}>Sin señal</small>
                                         </div>
                                     )}
                                 </div>
@@ -273,24 +330,22 @@
             const [tally, setTally] = useState('idle');
             const [micMuted, setMicMuted] = useState(false);
             const [camOff, setCamOff] = useState(false);
-            const [returnStream, setReturnStream] = useState(null);
+            const [returnStream, setReturnStream] = useState(null); // Stream del director (video+audio)
             const [facingMode, setFacingMode] = useState('environment');
             const [status, setStatus] = useState('Conectando...');
             
             const peer = useRef(null);
             const mqttClient = useRef(null);
             const localStream = useRef(null);
-            const obsCallRef = useRef(null); // Referencia a la llamada con OBS
 
             useEffect(() => {
                 if (!joined) return;
                 
-                setStatus('Iniciando MQTT...');
+                setStatus('Iniciando...');
                 
-                // 1. MQTT para Tally
+                // MQTT
                 mqttClient.current = mqtt.connect(MQTT_BROKER);
                 mqttClient.current.on('connect', () => {
-                    setStatus('MQTT OK - Conectando Peer...');
                     mqttClient.current.subscribe(`sc_tally/${roomName}/${slotId}`);
                 });
                 mqttClient.current.on('message', (t, msg) => {
@@ -298,7 +353,7 @@
                     if (data.state) setTally(data.state);
                 });
                 
-                // 2. WebRTC
+                // WebRTC
                 const init = async () => {
                     try {
                         setStatus('Pidiendo cámara...');
@@ -307,38 +362,38 @@
                             audio: { echoCancellation: true, noiseSuppression: true } 
                         });
                         localStream.current = s;
-                        setStatus('Cámara OK - Creando Peer...');
+                        setStatus('Cámara OK - Conectando...');
                         
                         const myId = `sc_guest_${roomName}_${slotId}`;
                         peer.current = new Peer(myId, PEER_CONFIG);
                         
-                        peer.current.on('open', (id) => {
-                            setStatus('Peer listo - Enviando a Director y OBS...');
-                            console.log('Guest peer abierto:', id);
+                        peer.current.on('open', () => {
+                            setStatus('Enviando a Director y OBS...');
                             
-                            // LLAMAR AL DIRECTOR
-                            const dirCall = peer.current.call(`sc_dir_${roomName}`, s);
+                            // Enviar a Director
+                            peer.current.call(`sc_dir_${roomName}`, s);
                             
-                            // LLAMAR A OBS (inmediatamente, no esperar a que nos llamen)
-                            const obsCall = peer.current.call(`sc_obs_${roomName}_${slotId}`, s);
-                            obsCallRef.current = obsCall;
+                            // Enviar a OBS
+                            peer.current.call(`sc_obs_${roomName}_${slotId}`, s);
                             
-                            if (dirCall) {
-                                setStatus('✅ EN VIVO - Conectado');
-                            }
+                            setStatus('✅ EN VIVO');
                         });
                         
-                        // ESCUCHAR LLAMADAS DE ENTRADA (IFB del Director)
+                        // RECIBIR LLAMADA DEL DIRECTOR (Video + Audio de retorno)
                         peer.current.on('call', (call) => {
-                            console.log('Llamada entrante (probablemente IFB)');
-                            setStatus('Recibiendo IFB...');
-                            call.answer(); // Contestar sin enviar nuestro stream de vuelta
+                            console.log('Recibiendo retorno del Director...');
+                            setStatus('Recibiendo retorno...');
+                            
+                            // IMPORTANTE: Contestar sin enviar nuestro stream de vuelta (ya lo enviamos arriba)
+                            call.answer(); 
+                            
                             call.on('stream', (remoteStream) => { 
-                                console.log('Stream de IFB recibido');
+                                console.log('Retorno recibido:', remoteStream.getVideoTracks().length, 'video tracks');
                                 setReturnStream(remoteStream);
-                                setStatus('✅ EN VIVO + IFB');
+                                setStatus('✅ EN VIVO + RETORNO');
                             });
-                            call.on('error', (err) => console.error('Error IFB:', err));
+                            
+                            call.on('error', (err) => console.error('Error retorno:', err));
                         });
 
                         peer.current.on('error', (err) => {
@@ -348,7 +403,7 @@
                         
                     } catch (e) { 
                         setStatus('Error: ' + e.message);
-                        alert("Error cámara: " + e.message); 
+                        alert("Error: " + e.message); 
                     }
                 };
                 init();
@@ -371,7 +426,6 @@
                     const newTrack = newStream.getVideoTracks()[0];
                     const oldTrack = localStream.current.getVideoTracks()[0];
                     
-                    // Reemplazar en todas las conexiones activas
                     if (peer.current && peer.current.connections) {
                         Object.values(peer.current.connections).forEach(calls => {
                             calls.forEach(call => {
@@ -386,9 +440,7 @@
                     localStream.current.removeTrack(oldTrack);
                     localStream.current.addTrack(newTrack);
                     oldTrack.stop();
-                } catch(e) {
-                    console.error('Error cambiando cámara:', e);
-                }
+                } catch(e) {}
             };
 
             if (!joined) return (
@@ -398,12 +450,12 @@
                         <p style={{color: '#94a3b8'}}>Sala: {roomName}</p>
                         <div style={{background: '#facc15', color: '#000', padding: '10px', borderRadius: '5px', fontSize: '0.8rem', marginBottom: '15px'}}>
                             ⚠️ Mantené la pantalla ENCENDIDA<br/>
-                            ⚠️ Usá Chrome (NO app de Facebook)<br/>
+                            ⚠️ Usá Chrome<br/>
                             <small>TURN: 140.82.25.249</small>
                         </div>
-                        <select style={{width: '100%', padding: '10px', marginBottom: '15px'}} onChange={(e) => setQuality(e.target.value)}>
+                        <select style={{width: '100%', padding: '10px', marginBottom: '15px'}}>
                             <option value="720">720p (HD)</option>
-                            <option value="360">360p (Ahorro datos)</option>
+                            <option value="360">360p</option>
                         </select>
                         <button className="btn" onClick={() => setJoined(true)}>INICIAR TRANSMISIÓN</button>
                     </div>
@@ -414,27 +466,27 @@
                 <div className={`guest-layout ${tally === 'live' ? 'tally-live' : tally === 'prev' ? 'tally-prev' : ''}`}>
                     <div className="guest-tally-border"></div>
                     <div className="big-tally-text">{tally === 'live' ? '● EN VIVO' : tally === 'prev' ? 'PREPARADO' : ''}</div>
-                    <div style={{position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.7)', padding: '5px 10px', borderRadius: '5px', fontSize: '0.8rem', zIndex: 100}}>
+                    
+                    <div style={{position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.7)', padding: '5px 10px', borderRadius: '5px', fontSize: '0.8rem', zIndex: 100, color: returnStream ? '#22c55e' : '#94a3b8'}}>
                         {status}
                     </div>
                     
-                    {/* IFB (Retorno del Director) */}
+                    {/* RETORNO DEL DIRECTOR - Video + Audio */}
                     <div className={`return-pip ${returnStream ? 'active' : ''}`}>
                         {returnStream && (
                             <VideoPlayer 
                                 stream={returnStream} 
-                                muted={false}  // IMPORTANTE: NO muted para escuchar al director
-                                className="w-full h-full object-cover"
+                                muted={false}  // IMPORTANTE: Escuchar audio del director
                             />
                         )}
-                        <div className="pip-label">🎧 IFB DIRECTOR</div>
+                        <div className="pip-label">📹 RETORNO DIRECTOR</div>
                     </div>
                     
-                    {/* Video propio */}
+                    {/* Video propio del reportero */}
                     {localStream.current && (
                         <VideoPlayer 
                             stream={localStream.current} 
-                            muted={true}  // Muted para no escuchar eco propio
+                            muted={true}
                             className="guest-video" 
                             style={{
                                 transform: facingMode === 'user' ? 'scaleX(-1)' : 'none', 
@@ -470,59 +522,41 @@
 
         const ObsView = ({ roomName, slotId }) => {
             const [stream, setStream] = useState(null);
-            const [status, setStatus] = useState('Esperando señal...');
+            const [status, setStatus] = useState('Esperando...');
             const peer = useRef(null);
             const videoRef = useRef(null);
 
             useEffect(() => {
                 const myId = `sc_obs_${roomName}_${slotId}`;
-                setStatus('Conectando como OBS...');
+                setStatus('Conectando...');
                 
                 peer.current = new Peer(myId, PEER_CONFIG);
                 
-                peer.current.on('open', (id) => {
-                    console.log('OBS Peer abierto:', id);
+                peer.current.on('open', () => {
                     setStatus('Listo - Esperando móvil...');
                     
-                    // Intentar conectar al móvil periódicamente
                     const tryConnect = () => {
                         if (!stream) {
-                            console.log('Intentando conectar al móvil...');
                             const conn = peer.current.connect(`sc_guest_${roomName}_${slotId}`);
-                            conn.on('open', () => {
-                                console.log('Conectado al móvil, pidiendo video...');
-                                conn.send('WAKE_UP_OBS');
-                            });
-                            conn.on('error', () => {});
+                            conn.on('open', () => conn.send('WAKE_UP_OBS'));
                         }
                     };
                     
-                    // Intentar inmediatamente y cada 3 segundos
                     tryConnect();
                     const interval = setInterval(tryConnect, 3000);
-                    
                     return () => clearInterval(interval);
                 });
                 
                 peer.current.on('call', (call) => {
-                    console.log('OBS: Llamada entrante recibida');
-                    setStatus('Recibiendo video...');
-                    call.answer(); // Contestar
+                    setStatus('Recibiendo...');
+                    call.answer();
                     call.on('stream', (s) => {
-                        console.log('Stream recibido en OBS');
                         setStream(s);
-                        setStatus('✅ Recibiendo señal');
-                    });
-                    call.on('close', () => {
-                        setStream(null);
-                        setStatus('Móvil desconectado');
+                        setStatus('✅ Señal recibida');
                     });
                 });
 
-                peer.current.on('error', (err) => {
-                    console.error('OBS Error:', err);
-                    setStatus('Error: ' + err.type);
-                });
+                peer.current.on('error', (err) => setStatus('Error: ' + err.type));
                 
                 return () => peer.current?.destroy();
             }, [roomName, slotId, stream]);
@@ -530,7 +564,7 @@
             useEffect(() => {
                 if (stream && videoRef.current) {
                     videoRef.current.srcObject = stream;
-                    videoRef.current.play().catch(e => console.error("Error reproduciendo:", e));
+                    videoRef.current.play().catch(e => {});
                 }
             }, [stream]);
 
@@ -539,10 +573,7 @@
                     {stream ? (
                         <video ref={videoRef} className="obs-video" autoPlay playsInline muted={false}></video>
                     ) : (
-                        <div className="obs-status">
-                            {status}<br/>
-                            <small style={{fontSize: '14px', color: '#94a3b8'}}>Esperando móvil {slotId}...</small>
-                        </div>
+                        <div className="obs-status">{status}</div>
                     )}
                 </div>
             );
@@ -573,17 +604,9 @@
                 <div className="lobby-container">
                     <div className="glass-box">
                         <h1 style={{color: '#3b82f6', marginBottom: '20px'}}>StreamCall MUNDIAL</h1>
-                        <input 
-                            value={appState.room} 
-                            onChange={(e) => setAppState({...appState, room: e.target.value.toUpperCase()})} 
-                            placeholder="NOMBRE SALA" 
-                        />
-                        <button className="btn" onClick={() => window.location.href=`?mode=director&room=${appState.room}`}>
-                            DASHBOARD DIRECTOR
-                        </button>
-                        <button className="btn btn-green" onClick={() => window.location.href=`?mode=guest&room=${appState.room}&slot=1`}>
-                            MÓVIL 1 (TEST)
-                        </button>
+                        <input value={appState.room} onChange={(e) => setAppState({...appState, room: e.target.value.toUpperCase()})} placeholder="NOMBRE SALA" />
+                        <button className="btn" onClick={() => window.location.href=`?mode=director&room=${appState.room}`}>DASHBOARD DIRECTOR</button>
+                        <button className="btn btn-green" onClick={() => window.location.href=`?mode=guest&room=${appState.room}&slot=1`}>MÓVIL 1</button>
                     </div>
                 </div>
             );
