@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>StreamCall - PIP Movible</title>
+    <title>StreamCall MUNDIAL</title>
     
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -13,45 +13,108 @@
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        body { background-color: #050505; color: white; font-family: Arial, sans-serif; margin: 0; padding: 0; height: 100vh; overflow: hidden; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #050505; color: white; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; }
         
+        /* LOBBY STYLES */
+        .lobby-container { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+            padding: 20px; 
+            text-align: center; 
+        }
+        .lobby-box { 
+            background: rgba(30, 41, 59, 0.9); 
+            padding: 40px; 
+            border-radius: 20px; 
+            border: 2px solid #334155; 
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); 
+            max-width: 450px; 
+            width: 100%; 
+        }
+        .lobby-title { 
+            font-size: 2.5rem; 
+            font-weight: 900; 
+            color: #3b82f6; 
+            margin-bottom: 10px; 
+            text-transform: uppercase; 
+            letter-spacing: -1px; 
+        }
+        .lobby-subtitle { 
+            color: #94a3b8; 
+            margin-bottom: 30px; 
+            font-size: 0.9rem; 
+        }
+        .lobby-input { 
+            width: 100%; 
+            background: #000; 
+            border: 2px solid #475569; 
+            color: white; 
+            padding: 15px; 
+            border-radius: 10px; 
+            font-size: 1.2rem; 
+            text-align: center; 
+            font-weight: bold; 
+            margin-bottom: 20px; 
+            outline: none; 
+            text-transform: uppercase; 
+        }
+        .lobby-input:focus { border-color: #3b82f6; }
+        .lobby-btn { 
+            width: 100%; 
+            padding: 16px; 
+            font-weight: 900; 
+            font-size: 1rem; 
+            border-radius: 10px; 
+            cursor: pointer; 
+            border: none; 
+            transition: all 0.2s; 
+            text-transform: uppercase; 
+            margin-bottom: 10px; 
+            display: block; 
+            text-decoration: none; 
+        }
+        .lobby-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
+        .btn-blue { background: #3b82f6; color: white; }
+        .btn-blue:hover { background: #2563eb; }
+        .btn-green { background: #10b981; color: black; }
+        .btn-green:hover { background: #059669; }
+        .btn-red { background: #ef4444; color: white; }
+        
+        /* GUEST STYLES */
         .guest-layout { width: 100vw; height: 100vh; position: relative; background: #000; overflow: hidden; }
         .guest-video-main { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        /* PIP Movible y Redimensionable */
+        /* PIP MOVIBLE */
         .pip-container {
             position: absolute;
-            width: 200px;
-            height: 150px;
+            width: 220px;
+            height: 165px;
             background: #000;
             border: 3px solid #3b82f6;
             border-radius: 12px;
             overflow: hidden;
             z-index: 100;
             box-shadow: 0 4px 20px rgba(0,0,0,0.8);
-            touch-action: none; /* Prevenir scroll al tocar */
+            touch-action: none;
             user-select: none;
             min-width: 120px;
             min-height: 90px;
             max-width: 80vw;
             max-height: 60vh;
         }
-        
-        .pip-video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            pointer-events: none; /* Para que los toques pasen al contenedor para drag */
-        }
-        
-        /* Header del PIP para arrastrar */
+        .pip-video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
         .pip-header {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            height: 30px;
-            background: rgba(59, 130, 246, 0.9);
+            height: 28px;
+            background: rgba(59, 130, 246, 0.95);
             cursor: move;
             display: flex;
             align-items: center;
@@ -61,69 +124,89 @@
             color: white;
             z-index: 102;
         }
-        
-        /* Handle para redimensionar */
         .pip-resize {
             position: absolute;
             bottom: 0;
             right: 0;
-            width: 20px;
-            height: 20px;
+            width: 25px;
+            height: 25px;
             background: linear-gradient(135deg, transparent 50%, #3b82f6 50%);
             cursor: nwse-resize;
             z-index: 103;
         }
-        
-        /* Controles de tamaño (botones) */
         .pip-controls {
             position: absolute;
             top: 30px;
             right: 5px;
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 3px;
             z-index: 101;
         }
-        
         .pip-btn {
-            width: 24px;
-            height: 24px;
-            background: rgba(0,0,0,0.7);
+            width: 26px;
+            height: 26px;
+            background: rgba(0,0,0,0.8);
             border: 1px solid #3b82f6;
             color: white;
-            font-size: 14px;
+            font-size: 16px;
             border-radius: 4px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
         }
-        
-        /* Indicador de estado */
         .pip-status {
             position: absolute;
-            bottom: 25px;
+            bottom: 5px;
             left: 5px;
             font-size: 10px;
             color: #22c55e;
-            background: rgba(0,0,0,0.7);
-            padding: 2px 5px;
+            background: rgba(0,0,0,0.8);
+            padding: 2px 6px;
             border-radius: 3px;
             z-index: 101;
         }
         
-        .tally-border { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 15px solid transparent; pointer-events: none; z-index: 50; box-sizing: border-box; }
+        /* TALLY */
+        .tally-border { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 15px solid transparent; pointer-events: none; z-index: 50; box-sizing: border-box; transition: border-color 0.3s; }
         .tally-live .tally-border { border-color: #ef4444; box-shadow: inset 0 0 50px rgba(239,68,68,0.8); }
-        .tally-prev .tally-border { border-color: #22c55e; }
+        .tally-prev .tally-border { border-color: #22c55e; box-shadow: inset 0 0 50px rgba(34,197,94,0.8); }
+        .big-tally { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); font-size: 1.5rem; font-weight: 900; padding: 10px 25px; border-radius: 10px; display: none; z-index: 100; text-transform: uppercase; }
+        .tally-live .big-tally { display: block; background: #ef4444; color: white; }
+        .tally-prev .big-tally { display: block; background: #22c55e; color: black; }
         
-        .big-tally { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); font-size: 1.5rem; font-weight: bold; padding: 10px 20px; border-radius: 10px; display: none; z-index: 100; background: #ef4444; }
-        .tally-live .big-tally { display: block; }
-        
-        .controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; background: rgba(0,0,0,0.8); padding: 12px 25px; border-radius: 50px; z-index: 100; }
-        .ctrl-btn { width: 50px; height: 50px; border-radius: 50%; border: none; background: #334155; color: white; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        /* CONTROLES */
+        .guest-controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; background: rgba(0,0,0,0.8); padding: 12px 25px; border-radius: 50px; z-index: 100; border: 1px solid #334155; backdrop-filter: blur(10px); }
+        .ctrl-btn { width: 55px; height: 55px; border-radius: 50%; border: none; background: #334155; color: white; font-size: 1.4rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .ctrl-btn:active { transform: scale(0.95); }
         .ctrl-btn.off { background: #ef4444; }
         
-        .status-badge { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 5px; font-size: 0.8rem; z-index: 90; }
+        .status-badge { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; z-index: 90; border: 1px solid #334155; }
+        
+        /* DIRECTOR */
+        .director-layout { display: flex; flex-direction: column; height: 100vh; background: #000; }
+        .director-header { background: #0f172a; border-bottom: 1px solid #334155; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .grid-container { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 15px; padding: 15px; overflow-y: auto; }
+        .slot-card { background: #1e293b; border: 2px solid #334155; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; min-height: 280px; transition: border-color 0.3s; }
+        .slot-card.live { border-color: #ef4444; box-shadow: 0 0 20px rgba(239,68,68,0.3); }
+        .slot-card.prev { border-color: #22c55e; }
+        .slot-video-area { flex: 1; background: #000; position: relative; display: flex; align-items: center; justify-content: center; min-height: 220px; }
+        .slot-video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+        .slot-status { position: absolute; color: #64748b; font-weight: bold; text-align: center; }
+        .vu-meter-container { width: 100%; height: 8px; background: #000; border-top: 1px solid #334; }
+        .vu-meter-bar { height: 100%; background: linear-gradient(90deg, #22c55e, #eab308, #ef4444); width: 0%; transition: width 0.1s linear; }
+        .slot-controls { padding: 12px; display: flex; justify-content: space-between; align-items: center; background: #0f172a; gap: 10px; }
+        .slot-title { font-weight: 900; color: #fff; font-size: 1.1rem; }
+        .tally-group { display: flex; gap: 5px; flex: 1; }
+        .t-btn { flex: 1; padding: 10px 0; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer; border: 2px solid transparent; background: #1e293b; color: #94a3b8; text-align: center; transition: all 0.2s; }
+        .t-btn:hover { transform: translateY(-1px); }
+        .t-btn.active-idle { border-color: #64748b; color: white; background: #334155; }
+        .t-btn.active-prev { background: rgba(34, 197, 94, 0.2); border-color: #22c55e; color: #22c55e; }
+        .t-btn.active-live { background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #ef4444; }
+        
+        .preview-box { width: 180px; height: 135px; background: #000; border: 2px solid #3b82f6; border-radius: 8px; overflow: hidden; margin-right: 15px; }
+        .preview-box video { width: 100%; height: 100%; object-fit: cover; }
     </style>
 </head>
 <body>
@@ -136,150 +219,111 @@
             config: { 
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
                     { urls: 'turn:140.82.25.249:3478', username: 'reportero', credential: 'mundial2026' },
                     { urls: 'turn:140.82.25.249:3478?transport=tcp', username: 'reportero', credential: 'mundial2026' }
                 ],
-                iceTransportPolicy: 'all'
+                iceTransportPolicy: 'all',
+                iceCandidatePoolSize: 10
             }
         };
         
         const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
 
-        // Componente PIP Movible y Redimensionable
+        // PIP MOVIBLE COMPONENT
         const DraggablePIP = ({ stream, label }) => {
             const containerRef = useRef(null);
-            const [size, setSize] = useState({ w: 200, h: 150 });
-            const [pos, setPos] = useState({ x: 20, y: 20 });
-            const dragging = useRef(false);
-            const resizing = useRef(false);
-            const startPos = useRef({ x: 0, y: 0 });
-            const startSize = useRef({ w: 0, h: 0 });
+            const videoRef = useRef(null);
+            const [size, setSize] = useState({ w: 220, h: 165 });
+            const [pos, setPos] = useState({ x: 20, y: 80 });
+            const dragRef = useRef({ active: false, resize: false, startX: 0, startY: 0, startW: 0, startH: 0 });
+
+            useEffect(() => {
+                if (videoRef.current && stream) {
+                    videoRef.current.srcObject = stream;
+                    // Intentar reproducir con audio
+                    const play = async () => {
+                        try {
+                            await videoRef.current.play();
+                        } catch (e) {
+                            // Si falla (autoplay policy), reproducir muted y luego unmute
+                            videoRef.current.muted = true;
+                            await videoRef.current.play();
+                            setTimeout(() => { videoRef.current.muted = false; }, 500);
+                        }
+                    };
+                    play();
+                }
+            }, [stream]);
 
             useEffect(() => {
                 const el = containerRef.current;
                 if (!el) return;
 
-                const onTouchStart = (e) => {
-                    if (e.target.classList.contains('pip-resize')) {
-                        resizing.current = true;
-                        startPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                        startSize.current = { ...size };
-                    } else if (e.target.classList.contains('pip-header')) {
-                        dragging.current = true;
-                        startPos.current = { x: e.touches[0].clientX - pos.x, y: e.touches[0].clientY - pos.y };
-                    }
-                };
-
-                const onMouseDown = (e) => {
-                    if (e.target.classList.contains('pip-resize')) {
-                        resizing.current = true;
-                        startPos.current = { x: e.clientX, y: e.clientY };
-                        startSize.current = { ...size };
+                const handleStart = (e) => {
+                    const target = e.target;
+                    const touch = e.touches ? e.touches[0] : e;
+                    
+                    if (target.classList.contains('pip-resize')) {
+                        dragRef.current = { active: false, resize: true, startX: touch.clientX, startY: touch.clientY, startW: size.w, startH: size.h };
                         e.preventDefault();
-                    } else if (e.target.classList.contains('pip-header')) {
-                        dragging.current = true;
-                        startPos.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+                    } else if (target.classList.contains('pip-header')) {
+                        dragRef.current = { active: true, resize: false, startX: touch.clientX - pos.x, startY: touch.clientY - pos.y, startW: 0, startH: 0 };
                         e.preventDefault();
                     }
                 };
 
-                const onMove = (clientX, clientY) => {
-                    if (dragging.current) {
+                const handleMove = (e) => {
+                    if (!dragRef.current.active && !dragRef.current.resize) return;
+                    
+                    const touch = e.touches ? e.touches[0] : e;
+                    e.preventDefault();
+
+                    if (dragRef.current.active) {
                         setPos({
-                            x: Math.max(0, Math.min(window.innerWidth - size.w, clientX - startPos.current.x)),
-                            y: Math.max(0, Math.min(window.innerHeight - size.h, clientY - startPos.current.y))
+                            x: Math.max(0, Math.min(window.innerWidth - size.w, touch.clientX - dragRef.current.startX)),
+                            y: Math.max(0, Math.min(window.innerHeight - size.h, touch.clientY - dragRef.current.startY))
                         });
-                    } else if (resizing.current) {
-                        const newW = Math.max(120, Math.min(window.innerWidth * 0.8, startSize.current.w + (clientX - startPos.current.x)));
-                        const newH = Math.max(90, Math.min(window.innerHeight * 0.6, startSize.current.h + (clientY - startPos.current.y)));
-                        setSize({ w: newW, h: newH });
+                    } else if (dragRef.current.resize) {
+                        setSize({
+                            w: Math.max(120, Math.min(window.innerWidth * 0.8, dragRef.current.startW + (touch.clientX - dragRef.current.startX))),
+                            h: Math.max(90, Math.min(window.innerHeight * 0.6, dragRef.current.startH + (touch.clientY - dragRef.current.startY)))
+                        });
                     }
                 };
 
-                const onTouchMove = (e) => {
-                    if (dragging.current || resizing.current) {
-                        e.preventDefault();
-                        onMove(e.touches[0].clientX, e.touches[0].clientY);
-                    }
+                const handleEnd = () => {
+                    dragRef.current = { active: false, resize: false, startX: 0, startY: 0, startW: 0, startH: 0 };
                 };
 
-                const onMouseMove = (e) => {
-                    onMove(e.clientX, e.clientY);
-                };
-
-                const onEnd = () => {
-                    dragging.current = false;
-                    resizing.current = false;
-                };
-
-                el.addEventListener('touchstart', onTouchStart, { passive: false });
-                el.addEventListener('mousedown', onMouseDown);
-                window.addEventListener('touchmove', onTouchMove, { passive: false });
-                window.addEventListener('mousemove', onMouseMove);
-                window.addEventListener('touchend', onEnd);
-                window.addEventListener('mouseup', onEnd);
+                el.addEventListener('touchstart', handleStart, { passive: false });
+                el.addEventListener('mousedown', handleStart);
+                window.addEventListener('touchmove', handleMove, { passive: false });
+                window.addEventListener('mousemove', handleMove);
+                window.addEventListener('touchend', handleEnd);
+                window.addEventListener('mouseup', handleEnd);
 
                 return () => {
-                    el.removeEventListener('touchstart', onTouchStart);
-                    el.removeEventListener('mousedown', onMouseDown);
-                    window.removeEventListener('touchmove', onTouchMove);
-                    window.removeEventListener('mousemove', onMouseMove);
-                    window.removeEventListener('touchend', onEnd);
-                    window.removeEventListener('mouseup', onEnd);
+                    el.removeEventListener('touchstart', handleStart);
+                    el.removeEventListener('mousedown', handleStart);
+                    window.removeEventListener('touchmove', handleMove);
+                    window.removeEventListener('mousemove', handleMove);
+                    window.removeEventListener('touchend', handleEnd);
+                    window.removeEventListener('mouseup', handleEnd);
                 };
             }, [pos, size]);
-
-            const videoRef = useRef(null);
-            useEffect(() => {
-                if (videoRef.current && stream) {
-                    videoRef.current.srcObject = stream;
-                    // Forzar reproducción
-                    const playVideo = () => {
-                        videoRef.current.play().catch(e => {
-                            console.log("Autoplay prevented, retrying muted...");
-                            videoRef.current.muted = true;
-                            videoRef.current.play().then(() => {
-                                setTimeout(() => { videoRef.current.muted = false; }, 1000);
-                            }).catch(e => console.error("Play failed:", e));
-                        });
-                    };
-                    playVideo();
-                }
-            }, [stream]);
 
             if (!stream) return null;
 
             return (
-                <div 
-                    ref={containerRef}
-                    className="pip-container"
-                    style={{ 
-                        width: size.w, 
-                        height: size.h, 
-                        left: pos.x, 
-                        top: pos.y,
-                        display: 'block'
-                    }}
-                >
-                    <div className="pip-header">
-                        {label}
-                    </div>
-                    
+                <div ref={containerRef} className="pip-container" style={{ width: size.w, height: size.h, left: pos.x, top: pos.y }}>
+                    <div className="pip-header">{label}</div>
                     <div className="pip-controls">
                         <button className="pip-btn" onClick={() => setSize({w: Math.min(size.w + 40, 400), h: Math.min(size.h + 30, 300)})}>+</button>
                         <button className="pip-btn" onClick={() => setSize({w: Math.max(size.w - 40, 120), h: Math.max(size.h - 30, 90)})}>-</button>
                     </div>
-                    
                     <div className="pip-status">● LIVE</div>
-                    
-                    <video 
-                        ref={videoRef}
-                        className="pip-video" 
-                        autoPlay 
-                        playsInline
-                        muted={false} /* Audio del director */
-                    />
-                    
+                    <video ref={videoRef} className="pip-video" autoPlay playsInline muted={false} />
                     <div className="pip-resize"></div>
                 </div>
             );
@@ -306,8 +350,10 @@
                     mqttClient.current.subscribe(`sc_tally/${roomName}/${slotId}`);
                 });
                 mqttClient.current.on('message', (t, msg) => {
-                    const data = JSON.parse(msg.toString());
-                    if (data.state) setTally(data.state);
+                    try {
+                        const data = JSON.parse(msg.toString());
+                        if (data.state) setTally(data.state);
+                    } catch(e) {}
                 });
                 
                 const init = async () => {
@@ -318,39 +364,30 @@
                             audio: { echoCancellation: true, noiseSuppression: true } 
                         });
                         localStream.current = s;
-                        setStatus('Conectando a servidor...');
+                        setStatus('Conectando...');
                         
                         const myId = `sc_guest_${roomName}_${slotId}`;
                         peer.current = new Peer(myId, PEER_CONFIG);
                         
                         peer.current.on('open', () => {
-                            setStatus('Enviando señal...');
                             peer.current.call(`sc_dir_${roomName}`, s);
                             peer.current.call(`sc_obs_${roomName}_${slotId}`, s);
                             setStatus('✅ EN VIVO');
                         });
                         
-                        // RECIBIR RETORNO DEL DIRECTOR
+                        // Recibir retorno del director
                         peer.current.on('call', (call) => {
-                            console.log('Retorno entrante del Director');
                             setStatus('Recibiendo retorno...');
-                            
-                            call.answer(); // Contestar sin enviar nada de vuelta
-                            
+                            call.answer();
                             call.on('stream', (remoteStream) => { 
-                                console.log('Stream remoto recibido:', remoteStream.getVideoTracks().length, 'video');
                                 if (remoteStream.getVideoTracks().length > 0) {
                                     setReturnStream(remoteStream);
                                     setStatus('✅ EN VIVO + RETORNO');
                                 }
                             });
-                            
-                            call.on('error', (err) => console.error('Error retorno:', err));
                         });
 
-                        peer.current.on('error', (err) => {
-                            setStatus('Error: ' + err.type);
-                        });
+                        peer.current.on('error', (err) => setStatus('Error: ' + err.type));
                         
                     } catch (e) { 
                         setStatus('Error: ' + e.message);
@@ -390,43 +427,44 @@
                 } catch(e) {}
             };
 
-            if (!joined) return (
-                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a', padding: '20px'}}>
-                    <div style={{background: 'rgba(30,41,59,0.9)', padding: '40px', borderRadius: '16px', maxWidth: '400px', textAlign: 'center', border: '1px solid #334155'}}>
-                        <h2 style={{color: '#3b82f6', marginBottom: '10px'}}>MÓVIL {slotId}</h2>
-                        <p style={{color: '#94a3b8', marginBottom: '20px'}}>Sala: {roomName}</p>
-                        <div style={{background: '#facc15', color: '#000', padding: '15px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '20px', textAlign: 'left'}}>
-                            <strong>⚠️ Instrucciones:</strong><br/>
-                            • Mantené la pantalla ENCENDIDA<br/>
-                            • Usá Chrome (NO app de Facebook)<br/>
-                            • El PIP del director se puede mover y agrandar
+            if (!joined) {
+                return (
+                    <div className="lobby-container">
+                        <div className="lobby-box">
+                            <h1 className="lobby-title">StreamCall</h1>
+                            <p className="lobby-subtitle">MÓVIL {slotId} | Sala: {roomName}</p>
+                            
+                            <div style={{background: '#facc15', color: '#000', padding: '15px', borderRadius: '10px', fontSize: '0.9rem', marginBottom: '25px', textAlign: 'left', fontWeight: '500'}}>
+                                <strong>📱 Instrucciones:</strong><br/>
+                                • Usá Chrome (NO la app de Facebook)<br/>
+                                • Mantené la pantalla ENCENDIDA<br/>
+                                • El PIP del director se puede mover y agrandar
+                            </div>
+
+                            <select style={{width: '100%', padding: '12px', marginBottom: '15px', background: '#000', border: '2px solid #475569', color: 'white', borderRadius: '8px'}}>
+                                <option value="720">720p (HD)</option>
+                                <option value="360">360p (Ahorro datos)</option>
+                            </select>
+
+                            <button className="lobby-btn btn-blue" onClick={() => setJoined(true)}>
+                                INICIAR TRANSMISIÓN →
+                            </button>
                         </div>
-                        <button 
-                            style={{width: '100%', padding: '15px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer'}}
-                            onClick={() => setJoined(true)}
-                        >
-                            INICIAR TRANSMISIÓN
-                        </button>
                     </div>
-                </div>
-            );
+                );
+            }
 
             return (
                 <div className={`guest-layout ${tally === 'live' ? 'tally-live' : tally === 'prev' ? 'tally-prev' : ''}`}>
                     <div className="tally-border"></div>
-                    <div className="big-tally">● EN VIVO</div>
+                    <div className="big-tally">{tally === 'live' ? '● EN VIVO' : 'PREPARADO'}</div>
                     
                     <div className="status-badge" style={{color: returnStream ? '#22c55e' : '#94a3b8'}}>
                         {status}
                     </div>
                     
-                    {/* PIP del Director - Movible y Redimensionable */}
-                    <DraggablePIP 
-                        stream={returnStream} 
-                        label="📹 DIRECTOR"
-                    />
+                    <DraggablePIP stream={returnStream} label="📹 DIRECTOR" />
                     
-                    {/* Video propio */}
                     {localStream.current && (
                         <video 
                             srcObject={localStream.current}
@@ -441,7 +479,7 @@
                         />
                     )}
                     
-                    <div className="controls">
+                    <div className="guest-controls">
                         <button className={`ctrl-btn ${micMuted ? 'off' : ''}`} onClick={() => {
                             const t = localStream.current?.getAudioTracks()[0]; 
                             if(t) {t.enabled = !t.enabled; setMicMuted(!t.enabled);}
@@ -462,9 +500,9 @@
 
         const DirectorView = ({ roomName }) => {
             const [slots, setSlots] = useState({ 
-                1: { connected: false, stream: null }, 
-                2: { connected: false, stream: null }, 
-                3: { connected: false, stream: null } 
+                1: { connected: false, stream: null, tally: 'idle' }, 
+                2: { connected: false, stream: null, tally: 'idle' }, 
+                3: { connected: false, stream: null, tally: 'idle' } 
             });
             const [talkbackActive, setTalkbackActive] = useState(false);
             const [localStream, setLocalStream] = useState(null);
@@ -479,9 +517,14 @@
                     [1,2,3].forEach(id => mqttClient.current.subscribe(`sc_tally/${roomName}/${id}`));
                 });
                 mqttClient.current.on('message', (t, msg) => {
-                    const data = JSON.parse(msg.toString());
-                    const match = t.match(/\/(\d+)$/);
-                    if (match) setSlots(prev => ({ ...prev, [match[1]]: { ...prev[match[1]], tally: data.state } }));
+                    try {
+                        const data = JSON.parse(msg.toString());
+                        const match = t.match(/\/(\d+)$/);
+                        if (match) {
+                            const slotId = match[1];
+                            setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], tally: data.state } }));
+                        }
+                    } catch(e) {}
                 });
 
                 peer.current = new Peer(`sc_dir_${roomName}`, PEER_CONFIG);
@@ -491,14 +534,18 @@
                         const slotId = match[1];
                         call.answer(); 
                         call.on('stream', (stream) => {
-                            setSlots(prev => ({ ...prev, [slotId]: { connected: true, stream: stream } }));
+                            setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], connected: true, stream: stream } }));
                         });
                         call.on('close', () => {
-                            setSlots(prev => ({ ...prev, [slotId]: { connected: false, stream: null } }));
+                            setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], connected: false, stream: null } }));
                         });
                     }
                 });
-                return () => { peer.current?.destroy(); mqttClient.current?.end(); localStream?.getTracks().forEach(t => t.stop()); };
+                return () => { 
+                    peer.current?.destroy(); 
+                    mqttClient.current?.end(); 
+                    localStream?.getTracks().forEach(t => t.stop());
+                };
             }, [roomName]);
 
             const handleTally = (slotId, state) => {
@@ -515,7 +562,6 @@
                     returnCallsRef.current = {};
                 } else {
                     try {
-                        // PEDIR VIDEO Y AUDIO DEL DIRECTOR
                         const s = await navigator.mediaDevices.getUserMedia({ 
                             audio: true, 
                             video: { width: 640, height: 480, facingMode: 'user' } 
@@ -523,7 +569,6 @@
                         setLocalStream(s);
                         setTalkbackActive(true);
                         
-                        // Enviar a móviles conectados
                         [1,2,3].forEach(slotId => {
                             if (slots[slotId].connected) {
                                 const returnCall = peer.current.call(`sc_guest_${roomName}_${slotId}`, s);
@@ -535,20 +580,29 @@
             };
 
             return (
-                <div style={{display: 'flex', flexDirection: 'column', height: '100vh', background: '#000'}}>
-                    <div style={{background: '#0f172a', borderBottom: '1px solid #334155', padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                <div className="director-layout">
+                    <div className="director-header">
                         <div>
-                            <h2 style={{color: '#3b82f6', margin: 0}}>StreamCall MUNDIAL</h2>
-                            <span style={{color: '#94a3b8', fontSize: '0.8rem'}}>Sala: {roomName}</span>
+                            <h2 style={{color: '#3b82f6', margin: 0, fontSize: '1.5rem', fontWeight: '900'}}>StreamCall MUNDIAL</h2>
+                            <span style={{color: '#94a3b8', fontSize: '0.9rem'}}>Sala: {roomName} | TURN: 140.82.25.249</span>
                         </div>
-                        <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
                             {localStream && (
-                                <div style={{width: '160px', height: '120px', background: '#000', border: '2px solid #3b82f6', borderRadius: '8px', overflow: 'hidden'}}>
+                                <div className="preview-box">
                                     <video srcObject={localStream} autoPlay muted style={{width: '100%', height: '100%', objectFit: 'cover'}} />
                                 </div>
                             )}
                             <button 
-                                style={{padding: '10px 20px', background: talkbackActive ? '#ef4444' : '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer'}}
+                                style={{
+                                    padding: '12px 24px', 
+                                    background: talkbackActive ? '#ef4444' : '#3b82f6', 
+                                    color: 'white', 
+                                    border: 'none', 
+                                    borderRadius: '8px', 
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem'
+                                }}
                                 onClick={toggleReturn}
                             >
                                 {talkbackActive ? '🔴 CORTAR RETORNO' : '📹 ENVIAR VIDEO'}
@@ -556,25 +610,35 @@
                         </div>
                     </div>
                     
-                    <div style={{flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '10px', padding: '10px', overflowY: 'auto'}}>
+                    <div className="grid-container">
                         {[1,2,3].map(slotId => (
-                            <div key={slotId} style={{background: '#1e293b', border: '2px solid', borderColor: slots[slotId].tally === 'live' ? '#ef4444' : slots[slotId].tally === 'prev' ? '#22c55e' : '#334155', borderRadius: '12px', display: 'flex', flexDirection: 'column', minHeight: '250px'}}>
-                                <div style={{flex: 1, background: '#000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '200px'}}>
+                            <div key={slotId} className={`slot-card ${slots[slotId].tally === 'live' ? 'live' : slots[slotId].tally === 'prev' ? 'prev' : ''}`}>
+                                <div className="slot-video-area">
                                     {slots[slotId].stream ? (
-                                        <video srcObject={slots[slotId].stream} autoPlay style={{width: '100%', height: '100%', objectFit: 'contain'}} />
+                                        <video srcObject={slots[slotId].stream} autoPlay className="slot-video" style={{muted: false}} />
                                     ) : (
-                                        <div style={{color: '#64748b', fontWeight: 'bold'}}>ESPERANDO MÓVIL {slotId}</div>
+                                        <div className="slot-status">
+                                            ESPERANDO MÓVIL {slotId}<br/>
+                                            <small style={{color: '#475569'}}>Sin señal</small>
+                                        </div>
                                     )}
                                 </div>
-                                <div style={{padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a'}}>
-                                    <div>
-                                        <div style={{fontWeight: 'bold'}}>MÓVIL {slotId}</div>
-                                        <div style={{fontSize: '0.8rem', color: slots[slotId].connected ? '#22c55e' : '#ef4444'}}>{slots[slotId].connected ? '● ONLINE' : '○ OFFLINE'}</div>
+                                {slots[slotId].connected && (
+                                    <div className="vu-meter-container">
+                                        <div className="vu-meter-bar" style={{width: '0%'}}></div>
                                     </div>
-                                    <div style={{display: 'flex', gap: '5px'}}>
-                                        <button style={{padding: '8px', background: slots[slotId].tally === 'idle' ? '#475569' : 'transparent', color: 'white', border: '1px solid #64748b', borderRadius: '6px'}} onClick={()=>handleTally(slotId, 'idle')}>SAFE</button>
-                                        <button style={{padding: '8px', background: slots[slotId].tally === 'prev' ? 'rgba(34,197,94,0.2)' : 'transparent', color: slots[slotId].tally === 'prev' ? '#22c55e' : '#94a3b8', border: '1px solid', borderColor: slots[slotId].tally === 'prev' ? '#22c55e' : 'transparent', borderRadius: '6px'}} onClick={()=>handleTally(slotId, 'prev')}>PREV</button>
-                                        <button style={{padding: '8px', background: slots[slotId].tally === 'live' ? 'rgba(239,68,68,0.2)' : 'transparent', color: slots[slotId].tally === 'live' ? '#ef4444' : '#94a3b8', border: '1px solid', borderColor: slots[slotId].tally === 'live' ? '#ef4444' : 'transparent', borderRadius: '6px'}} onClick={()=>handleTally(slotId, 'live')}>LIVE</button>
+                                )}
+                                <div className="slot-controls">
+                                    <div>
+                                        <div className="slot-title">MÓVIL {slotId}</div>
+                                        <div style={{fontSize: '0.8rem', color: slots[slotId].connected ? '#22c55e' : '#ef4444', fontWeight: 'bold'}}>
+                                            {slots[slotId].connected ? '● ONLINE' : '○ OFFLINE'}
+                                        </div>
+                                    </div>
+                                    <div className="tally-group">
+                                        <button className={`t-btn ${slots[slotId].tally==='idle'?'active-idle':''}`} onClick={()=>handleTally(slotId, 'idle')}>SAFE</button>
+                                        <button className={`t-btn ${slots[slotId].tally==='prev'?'active-prev':''}`} onClick={()=>handleTally(slotId, 'prev')}>PREV</button>
+                                        <button className={`t-btn ${slots[slotId].tally==='live'?'active-live':''}`} onClick={()=>handleTally(slotId, 'live')}>LIVE</button>
                                     </div>
                                 </div>
                             </div>
@@ -586,31 +650,66 @@
 
         const App = () => {
             const [appState, setAppState] = useState({ mode: null, room: null, slot: '1' });
+
             useEffect(() => {
                 const params = new URLSearchParams(window.location.search);
                 const m = params.get('mode'); 
                 const r = params.get('room');
                 const s = params.get('slot') || '1';
-                if (m && r) { setAppState({ mode: m, room: r.toUpperCase(), slot: s }); }
-                else { setAppState({ mode: 'lobby', room: 'TEST', slot: '1' }); }
+                
+                if (m && r) { 
+                    setAppState({ mode: m, room: r.toUpperCase(), slot: s });
+                } else {
+                    setAppState({ mode: 'lobby', room: 'TEST', slot: '1' });
+                }
             }, []);
+
+            // LOBBY VIEW
+            if (appState.mode === 'lobby') {
+                return (
+                    <div className="lobby-container">
+                        <div className="lobby-box">
+                            <h1 className="lobby-title">StreamCall</h1>
+                            <p className="lobby-subtitle">Sistema de Transmisión Multi-Cámara</p>
+                            
+                            <input 
+                                className="lobby-input" 
+                                value={appState.room} 
+                                onChange={(e) => setAppState({...appState, room: e.target.value.toUpperCase()})} 
+                                placeholder="NOMBRE DE LA SALA" 
+                            />
+                            
+                            <button 
+                                className="lobby-btn btn-blue" 
+                                onClick={() => window.location.href = `?mode=director&room=${appState.room}`}
+                            >
+                                🎛️ DASHBOARD DIRECTOR
+                            </button>
+                            
+                            <button 
+                                className="lobby-btn btn-green" 
+                                onClick={() => window.location.href = `?mode=guest&room=${appState.room}&slot=1`}
+                            >
+                                📱 MÓVIL 1 (TEST)
+                            </button>
+                            
+                            <div style={{marginTop: '20px', padding: '10px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', fontSize: '0.75rem', color: '#64748b'}}>
+                                TURN Server: 140.82.25.249<br/>
+                                Optimizado para iPhone & Android
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
 
             if (appState.mode === 'director') return <DirectorView roomName={appState.room} />;
             if (appState.mode === 'guest') return <GuestView roomName={appState.room} slotId={appState.slot} />;
             
-            return (
-                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a'}}>
-                    <div style={{background: 'rgba(30,41,59,0.8)', padding: '40px', borderRadius: '16px', textAlign: 'center'}}>
-                        <h1 style={{color: '#3b82f6', marginBottom: '20px'}}>StreamCall MUNDIAL</h1>
-                        <input value={appState.room} onChange={(e) => setAppState({...appState, room: e.target.value.toUpperCase()})} placeholder="NOMBRE SALA" style={{textTransform: 'uppercase', marginBottom: '10px'}} />
-                        <button className="btn" onClick={() => window.location.href=`?mode=director&room=${appState.room}`} style={{marginBottom: '10px'}}>DASHBOARD DIRECTOR</button>
-                        <button style={{padding: '10px', background: '#10b981', color: 'black', border: 'none', borderRadius: '8px', cursor: 'pointer'}} onClick={() => window.location.href=`?mode=guest&room=${appState.room}&slot=1`}>MÓVIL 1</button>
-                    </div>
-                </div>
-            );
+            return <div style={{color: 'white', textAlign: 'center', marginTop: '50px'}}>Cargando...</div>;
         };
         
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
