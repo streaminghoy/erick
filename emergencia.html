@@ -1,68 +1,269 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test TURN Android</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>StreamCall Android - Simple</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-</head>
-<body style="background:#000; color:#0f0; font-family:monospace; padding:20px;">
-    <h2>Test Conexión TURN</h2>
-    <div id="log"></div>
-
-    <script>
-        const log = (msg) => {
-            document.getElementById('log').innerHTML += msg + '<br>';
-            console.log(msg);
-        };
-
-        const PEER_CONFIG = {
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { 
-                        urls: 'turn:140.82.25.249:3478',
-                        username: 'reportero',
-                        credential: 'mundial2026'
-                    }
-                ]
-            },
-            debug: 3 // Máximo debug
-        };
-
-        log('Creando peer...');
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #000; color: white; font-family: Arial; overflow: hidden; }
         
-        const peer = new Peer('test-android-' + Date.now(), PEER_CONFIG);
+        #lobby { 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            height: 100vh; background: #0f172a; padding: 20px; text-align: center; 
+        }
+        .btn { 
+            background: #3b82f6; color: white; border: none; padding: 20px 40px; 
+            font-size: 1.2rem; border-radius: 10px; margin-top: 20px; cursor: pointer; 
+        }
+        .btn:active { background: #1d4ed8; }
+        
+        #live { display: none; position: relative; width: 100vw; height: 100vh; }
+        #myVideo { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        
+        #controls { 
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 15px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 50px;
+        }
+        .ctrlBtn { 
+            width: 55px; height: 55px; border-radius: 50%; border: none; 
+            font-size: 1.5rem; cursor: pointer; background: #334155; color: white;
+        }
+        .ctrlBtn.red { background: #ef4444; }
+        
+        #status { 
+            position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); 
+            padding: 10px; border-radius: 5px; font-size: 0.9rem; z-index: 100;
+        }
+        #tally { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            border: 15px solid transparent; pointer-events: none; z-index: 50; 
+            box-sizing: border-box;
+        }
+        #tally.live { border-color: #ef4444; box-shadow: inset 0 0 50px rgba(239,68,68,0.8); }
+        #tally.prev { border-color: #22c55e; }
+        
+        #error { color: #ef4444; margin-top: 10px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
 
+<div id="lobby">
+    <h1>StreamCall Android</h1>
+    <p style="margin: 10px 0; color: #94a3b8;">Sala: <span id="roomName">CARGANDO...</span></p>
+    <p style="font-size: 0.8rem; color: #facc15; margin-bottom: 20px;">
+        ⚠️ Mantené la pantalla ENCENDIDA<br>
+        ⚠️ Usá Chrome (NO la app de Facebook)
+    </p>
+    <select id="quality" style="padding: 10px; font-size: 1rem; margin-bottom: 20px;">
+        <option value="720">720p (HD)</option>
+        <option value="360">360p (Ahorro)</option>
+    </select>
+    <button class="btn" onclick="startBroadcast()">INICIAR TRANSMISIÓN</button>
+    <div id="error"></div>
+</div>
+
+<div id="live">
+    <div id="status">Conectando...</div>
+    <div id="tally"></div>
+    <video id="myVideo" autoplay playsinline muted></video>
+    
+    <div id="controls">
+        <button class="ctrlBtn" onclick="toggleMic()" id="btnMic">🎤</button>
+        <button class="ctrlBtn" onclick="toggleCam()" id="btnCam">📷</button>
+        <button class="ctrlBtn" onclick="switchCam()">🔄</button>
+    </div>
+</div>
+
+<script>
+// Configuración
+const PEER_CONFIG = {
+    config: {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { 
+                urls: 'turn:140.82.25.249:3478',
+                username: 'reportero',
+                credential: 'mundial2026'
+            },
+            {
+                urls: 'turn:140.82.25.249:3478?transport=tcp',
+                username: 'reportero',
+                credential: 'mundial2026'
+            }
+        ],
+        iceTransportPolicy: 'all',
+        iceCandidatePoolSize: 10
+    }
+};
+
+const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
+
+// Obtener parámetros URL
+const params = new URLSearchParams(window.location.search);
+const room = params.get('room') || 'TEST';
+const slot = params.get('slot') || '1';
+
+document.getElementById('roomName').innerText = room;
+
+let localStream = null;
+let peer = null;
+let mqttClient = null;
+let currentFacing = 'user';
+
+async function startBroadcast() {
+    try {
+        document.getElementById('error').innerText = '';
+        const quality = document.getElementById('quality').value;
+        const res = quality === '720' ? [1280, 720] : [640, 360];
+        
+        // 1. Obtener cámara
+        console.log('Pidiendo cámara...');
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: { 
+                width: { ideal: res[0] }, 
+                height: { ideal: res[1] },
+                facingMode: 'environment' // Trasera primero para Android
+            },
+            audio: { 
+                echoCancellation: true, 
+                noiseSuppression: true 
+            }
+        });
+        
+        document.getElementById('myVideo').srcObject = localStream;
+        document.getElementById('lobby').style.display = 'none';
+        document.getElementById('live').style.display = 'block';
+        document.getElementById('status').innerText = 'Iniciando conexión...';
+        
+        // 2. Conectar MQTT
+        mqttClient = mqtt.connect(MQTT_BROKER);
+        mqttClient.on('connect', () => {
+            console.log('MQTT conectado');
+            mqttClient.subscribe(`sc_tally/${room}/${slot}`);
+            document.getElementById('status').innerText = 'MQTT OK - Conectando Peer...';
+        });
+        
+        mqttClient.on('message', (topic, msg) => {
+            try {
+                const data = JSON.parse(msg);
+                const tally = document.getElementById('tally');
+                tally.className = '';
+                if (data.state === 'live') tally.classList.add('live');
+                if (data.state === 'prev') tally.classList.add('prev');
+            } catch(e) {}
+        });
+        
+        // 3. Crear Peer
+        const myId = `sc_guest_${room}_${slot}`;
+        peer = new Peer(myId, PEER_CONFIG);
+        
         peer.on('open', (id) => {
-            log('✅ Peer abierto: ' + id);
-            log('Probando ICE...');
+            console.log('Peer abierto:', id);
+            document.getElementById('status').innerText = 'Peer OK - Enviando video...';
             
-            // Crear conexión de datos para forzar negociación ICE
-            const conn = peer.connect('test-dummy-' + Date.now());
-            
-            conn.on('open', () => {
-                log('✅ Conexión de datos abierta');
-            });
-            
-            conn.on('error', (err) => {
-                log('❌ Error conexión: ' + err);
-            });
+            // Llamar al director
+            const call = peer.call(`sc_dir_${room}`, localStream);
+            if (call) {
+                document.getElementById('status').innerText = '✅ EN VIVO - TURN activo';
+            } else {
+                document.getElementById('status').innerText = '❌ Error al llamar';
+            }
         });
-
+        
         peer.on('error', (err) => {
-            log('❌ ERROR PEER: ' + err.type + ' - ' + err.message);
+            console.error('Peer error:', err);
+            document.getElementById('status').innerText = 'Error: ' + err.type;
         });
-
-        peer.on('iceStateChange', (state) => {
-            log('ICE State: ' + state);
+        
+        // 4. Escuchar retorno (IFB)
+        peer.on('call', (call) => {
+            console.log('Recibiendo retorno...');
+            call.answer();
         });
+        
+        // 5. Mantener vivo (truco para Android)
+        setInterval(() => {
+            if (peer && !peer.destroyed) {
+                console.log('Keepalive...');
+            }
+        }, 5000);
+        
+    } catch (err) {
+        console.error(err);
+        document.getElementById('error').innerText = 'Error: ' + err.message;
+    }
+}
 
-        // Después de 10 segundos, mostrar candidatos ICE
-        setTimeout(() => {
-            log('--- Estado final ---');
-            log('Ver consola para más detalles (F12)');
-        }, 10000);
-    </script>
+function toggleMic() {
+    if (!localStream) return;
+    const track = localStream.getAudioTracks()[0];
+    if (track) {
+        track.enabled = !track.enabled;
+        document.getElementById('btnMic').classList.toggle('red');
+        document.getElementById('btnMic').innerText = track.enabled ? '🎤' : '🔇';
+    }
+}
+
+function toggleCam() {
+    if (!localStream) return;
+    const track = localStream.getVideoTracks()[0];
+    if (track) {
+        track.enabled = !track.enabled;
+        document.getElementById('btnCam').classList.toggle('red');
+    }
+}
+
+async function switchCam() {
+    if (!localStream) return;
+    try {
+        const newFacing = currentFacing === 'user' ? 'environment' : 'user';
+        currentFacing = newFacing;
+        
+        const newStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: newFacing },
+            audio: false
+        });
+        
+        const newTrack = newStream.getVideoTracks()[0];
+        const oldTrack = localStream.getVideoTracks()[0];
+        
+        // Reemplazar en conexiones
+        if (peer && peer.connections) {
+            Object.values(peer.connections).forEach(calls => {
+                calls.forEach(call => {
+                    if (call.peerConnection) {
+                        const sender = call.peerConnection.getSenders()
+                            .find(s => s.track && s.track.kind === 'video');
+                        if (sender) sender.replaceTrack(newTrack);
+                    }
+                });
+            });
+        }
+        
+        // Reemplazar en stream local
+        localStream.removeTrack(oldTrack);
+        localStream.addTrack(newTrack);
+        oldTrack.stop();
+        
+        document.getElementById('myVideo').srcObject = localStream;
+        
+    } catch (err) {
+        alert('Error cambiando cámara: ' + err.message);
+    }
+}
+
+// No dejar que se duerma (truco simple)
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        console.log('Página oculta - Android puede cortar...');
+    }
+});
+</script>
+
 </body>
 </html>
