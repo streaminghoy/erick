@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>StreamCall - Final</title>
+    <title>StreamCall - Final Fix</title>
     
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -13,8 +13,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        * { box-sizing: border-box; }
-        body { background-color: #000; color: white; font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; margin: 0; padding: 0; height: 100vh; overflow: hidden; touch-action: none; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { background-color: #000; color: white; font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; margin: 0; padding: 0; height: 100vh; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
         
         .lobby-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: #0f172a; padding: 20px; text-align: center; }
         .glass-box { background: rgba(30, 41, 59, 0.9); padding: 40px; border-radius: 16px; max-width: 400px; width: 100%; border: 1px solid #334155; backdrop-filter: blur(10px); }
@@ -54,7 +54,6 @@
         .tally-live .guest-tally-border { border-color: #ef4444; box-shadow: inset 0 0 50px rgba(239,68,68,0.8); }
         .tally-prev .guest-tally-border { border-color: #22c55e; box-shadow: inset 0 0 50px rgba(34,197,94,0.8); }
         
-        /* PIP Simplificado y Funcional */
         .return-pip { 
             position: absolute; 
             background: #000; 
@@ -64,6 +63,7 @@
             z-index: 80; 
             display: none;
             box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            touch-action: none;
         }
         .return-pip.active { display: block; }
         .return-pip video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
@@ -92,10 +92,10 @@
         
         .pip-corner-resize {
             position: absolute;
-            bottom: -5px;
-            right: -5px;
-            width: 30px;
-            height: 30px;
+            bottom: 0;
+            right: 0;
+            width: 35px;
+            height: 35px;
             cursor: se-resize;
             z-index: 11;
             touch-action: none;
@@ -196,7 +196,8 @@
                 ],
                 iceTransportPolicy: 'all',
                 iceCandidatePoolSize: 10
-            }
+            },
+            debug: 0
         };
         
         const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
@@ -206,7 +207,13 @@
             useEffect(() => {
                 if (videoRef.current && stream) {
                     videoRef.current.srcObject = stream;
-                    videoRef.current.play().catch(e => console.log("Play error:", e));
+                    const playPromise = videoRef.current.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(e => {
+                            videoRef.current.muted = true;
+                            videoRef.current.play().catch(e2 => console.error("Play error:", e2));
+                        });
+                    }
                 }
             }, [stream]);
             return <video ref={videoRef} className={className} style={style} autoPlay playsInline muted={muted}></video>;
@@ -225,108 +232,96 @@
                     source.connect(analyser);
                     const data = new Uint8Array(analyser.frequencyBinCount);
                     
+                    let rafId;
                     const tick = () => {
                         analyser.getByteFrequencyData(data);
                         let sum = 0;
                         for(let i = 0; i < data.length; i++) sum += data[i];
                         const level = Math.min((sum / data.length) * 3, 100);
                         if (barRef.current) barRef.current.style.width = level + '%';
-                        requestAnimationFrame(tick);
+                        rafId = requestAnimationFrame(tick);
                     };
                     tick();
+                    return () => cancelAnimationFrame(rafId);
                 } catch(e) {}
             }, [stream]);
             return <div className="vu-meter-container"><div ref={barRef} className="vu-meter-bar" style={{ width: '0%' }}></div></div>;
         };
 
-        // PIP Arrastrable - Versión simplificada y robusta
         const DraggablePIP = ({ stream }) => {
             const [pos, setPos] = useState({ x: 20, y: 20 });
             const [size, setSize] = useState({ w: 200, h: 150 });
-            const dragState = useRef({ active: false, type: null, startX: 0, startY: 0, startPosX: 0, startPosY: 0, startW: 0, startH: 0 });
-            const elRef = useRef(null);
+            const isDragging = useRef(false);
+            const isResizing = useRef(false);
+            const startPos = useRef({ x: 0, y: 0 });
+            const startRect = useRef({ x: 0, y: 0, w: 0, h: 0 });
 
             useEffect(() => {
                 const handleMove = (e) => {
-                    if (!dragState.current.active) return;
-                    e.preventDefault();
+                    if (!isDragging.current && !isResizing.current) return;
                     
                     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    const dx = clientX - dragState.current.startX;
-                    const dy = clientY - dragState.current.startY;
                     
-                    if (dragState.current.type === 'drag') {
-                        const newX = Math.max(0, Math.min(window.innerWidth - size.w - 10, dragState.current.startPosX + dx));
-                        const newY = Math.max(0, Math.min(window.innerHeight - size.h - 100, dragState.current.startPosY + dy));
+                    if (isDragging.current) {
+                        const newX = Math.max(0, Math.min(window.innerWidth - size.w, 
+                            startRect.current.x + (clientX - startPos.current.x)));
+                        const newY = Math.max(0, Math.min(window.innerHeight - size.h - 80,
+                            startRect.current.y + (clientY - startPos.current.y)));
                         setPos({ x: newX, y: newY });
-                    } else if (dragState.current.type === 'resize') {
-                        const newW = Math.max(120, Math.min(window.innerWidth - pos.x - 20, dragState.current.startW + dx));
+                    } else if (isResizing.current) {
+                        const newW = Math.max(120, Math.min(window.innerWidth - pos.x - 10, 
+                            startRect.current.w + (clientX - startPos.current.x)));
                         const newH = newW * 0.75;
                         setSize({ w: newW, h: newH });
                     }
                 };
                 
                 const handleEnd = () => {
-                    dragState.current.active = false;
+                    isDragging.current = false;
+                    isResizing.current = false;
                 };
                 
-                window.addEventListener('mousemove', handleMove, { passive: false });
-                window.addEventListener('mouseup', handleEnd);
-                window.addEventListener('touchmove', handleMove, { passive: false });
-                window.addEventListener('touchend', handleEnd);
+                document.addEventListener('mousemove', handleMove, { passive: false });
+                document.addEventListener('mouseup', handleEnd);
+                document.addEventListener('touchmove', handleMove, { passive: false });
+                document.addEventListener('touchend', handleEnd);
                 
                 return () => {
-                    window.removeEventListener('mousemove', handleMove);
-                    window.removeEventListener('mouseup', handleEnd);
-                    window.removeEventListener('touchmove', handleMove);
-                    window.removeEventListener('touchend', handleEnd);
+                    document.removeEventListener('mousemove', handleMove);
+                    document.removeEventListener('mouseup', handleEnd);
+                    document.removeEventListener('touchmove', handleMove);
+                    document.removeEventListener('touchend', handleEnd);
                 };
-            }, [pos.x, pos.y, size.w]);
+            }, [pos.x, size.w]);
 
-            const startDrag = (e, type) => {
+            const startDrag = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                
+                isDragging.current = true;
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                
-                dragState.current = {
-                    active: true,
-                    type: type,
-                    startX: clientX,
-                    startY: clientY,
-                    startPosX: pos.x,
-                    startPosY: pos.y,
-                    startW: size.w,
-                    startH: size.h
-                };
+                startPos.current = { x: clientX, y: clientY };
+                startRect.current = { x: pos.x, y: pos.y, w: size.w, h: size.h };
+            };
+
+            const startResize = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                isResizing.current = true;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                startPos.current = { x: clientX, y: clientY };
+                startRect.current = { x: pos.x, y: pos.y, w: size.w, h: size.h };
             };
 
             if (!stream) return null;
 
             return (
-                <div 
-                    ref={elRef}
-                    className="return-pip active"
-                    style={{
-                        left: pos.x,
-                        top: pos.y,
-                        width: size.w,
-                        height: size.h
-                    }}
-                >
-                    <div 
-                        className="pip-drag-header"
-                        onMouseDown={(e) => startDrag(e, 'drag')}
-                        onTouchStart={(e) => startDrag(e, 'drag')}
-                    />
+                <div className="return-pip active" style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}>
+                    <div className="pip-drag-header" onMouseDown={startDrag} onTouchStart={startDrag} />
                     <VideoPlayer stream={stream} muted={false} />
-                    <div 
-                        className="pip-corner-resize"
-                        onMouseDown={(e) => startDrag(e, 'resize')}
-                        onTouchStart={(e) => startDrag(e, 'resize')}
-                    />
+                    <div className="pip-corner-resize" onMouseDown={startResize} onTouchStart={startResize} />
                 </div>
             );
         };
@@ -352,6 +347,7 @@
                         try {
                             const returnCall = peer.current.call(`sc_guest_${roomName}_${slotId}`, localStream);
                             returnCallsRef.current[slotId] = returnCall;
+                            returnCallsRef.current[slotId] = returnCall;
                             returnCall.on('close', () => delete returnCallsRef.current[slotId]);
                         } catch(e) {}
                     }
@@ -364,9 +360,11 @@
                     [1,2,3].forEach(id => mqttClient.current.subscribe(`sc_tally/${roomName}/${id}`));
                 });
                 mqttClient.current.on('message', (t, msg) => {
-                    const data = JSON.parse(msg.toString());
-                    const match = t.match(/\/(\d+)$/);
-                    if (match) setSlots(prev => ({ ...prev, [match[1]]: { ...prev[match[1]], tally: data.state } }));
+                    try {
+                        const data = JSON.parse(msg.toString());
+                        const match = t.match(/\/(\d+)$/);
+                        if (match) setSlots(prev => ({ ...prev, [match[1]]: { ...prev[match[1]], tally: data.state } }));
+                    } catch(e) {}
                 });
 
                 peer.current = new Peer(`sc_dir_${roomName}`, PEER_CONFIG);
@@ -375,7 +373,7 @@
                     const match = call.peer.match(/_(\d+)$/);
                     if (match) {
                         const slotId = match[1];
-                        call.answer(); 
+                        call.answer();
                         call.on('stream', (stream) => {
                             setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], connected: true, stream: stream } }));
                         });
@@ -412,16 +410,7 @@
                         });
                         setLocalStream(s);
                         setTalkbackActive(true);
-                        
-                        [1,2,3].forEach(slotId => {
-                            if (slots[slotId].connected) {
-                                const returnCall = peer.current.call(`sc_guest_${roomName}_${slotId}`, s);
-                                returnCallsRef.current[slotId] = returnCall;
-                            }
-                        });
-                    } catch(e) { 
-                        alert("Error: " + e.message);
-                    }
+                    } catch(e) { alert("Error: " + e.message); }
                 }
             };
 
@@ -495,7 +484,6 @@
             const mqttClient = useRef(null);
             const localStream = useRef(null);
             const obsInterval = useRef(null);
-            const obsConnected = useRef(false);
 
             useEffect(() => {
                 if (!joined) return;
@@ -515,14 +503,13 @@
                     try {
                         const s = await navigator.mediaDevices.getUserMedia({ 
                             video: { width: 1280, height: 720, facingMode: facingMode }, 
-                            audio: { echoCancellation: true, noiseSuppression: true } 
+                            audio: { echoCancellation: true, noiseSuppression: true }
                         });
                         localStream.current = s;
                         
                         const myId = `sc_guest_${roomName}_${slotId}`;
                         peer.current = new Peer(myId, PEER_CONFIG);
                         
-                        // Escuchar retorno del director
                         peer.current.on('call', (call) => {
                             call.answer();
                             call.on('stream', (remoteStream) => { 
@@ -531,39 +518,21 @@
                         });
 
                         peer.current.on('open', () => {
-                            // Enviar a Director
+                            // Conectar a Director inmediatamente
                             peer.current.call(`sc_dir_${roomName}`, s);
                             
-                            // Enviar a OBS con reintentos inteligentes
-                            const tryConnectObs = () => {
-                                if (!peer.current) return;
-                                const obsId = `sc_obs_${roomName}_${slotId}`;
-                                
-                                // Verificar si ya tenemos conexión media activa con OBS
-                                const conns = peer.current.connections[obsId];
-                                const hasActiveMedia = conns && conns.some(c => c.type === 'media' && c.open);
-                                
-                                if (!hasActiveMedia && !obsConnected.current) {
-                                    peer.current.call(obsId, s);
-                                } else if (hasActiveMedia) {
-                                    obsConnected.current = true;
-                                }
+                            // Conectar a OBS con reintentos agresivos
+                            const tryObs = () => {
+                                try {
+                                    peer.current.call(`sc_obs_${roomName}_${slotId}`, s);
+                                } catch(e) {}
                             };
                             
-                            // Intentar cada 2 segundos durante los primeros 30 segundos
-                            tryConnectObs();
-                            obsInterval.current = setInterval(tryConnectObs, 2000);
-                            
-                            // Después de 30 segundos, reducir frecuencia
-                            setTimeout(() => {
-                                clearInterval(obsInterval.current);
-                                obsInterval.current = setInterval(tryConnectObs, 5000);
-                            }, 30000);
+                            tryObs();
+                            obsInterval.current = setInterval(tryObs, 1500);
                         });
                         
-                        peer.current.on('error', (err) => {
-                            console.log('Peer error:', err.type);
-                        });
+                        peer.current.on('error', (err) => console.error('Peer error:', err.type));
                         
                     } catch (e) { 
                         alert("Error de cámara: " + e.message); 
@@ -582,29 +551,38 @@
             const switchCamera = async () => {
                 const next = facingMode === 'user' ? 'environment' : 'user';
                 setFacingMode(next);
+                
                 try {
+                    // FIX CRÍTICO: Pedir SOLO video, mantener audio existente
                     const newStream = await navigator.mediaDevices.getUserMedia({ 
                         video: { facingMode: next }, 
-                        audio: false 
+                        audio: false // NO pedir audio aquí
                     });
-                    const newTrack = newStream.getVideoTracks()[0];
-                    const oldTrack = localStream.current.getVideoTracks()[0];
                     
-                    // Reemplazar track en todas las conexiones
+                    const newVideoTrack = newStream.getVideoTracks()[0];
+                    const oldVideoTrack = localStream.current.getVideoTracks()[0];
+                    
+                    // Reemplazar en todas las conexiones PeerJS
                     Object.values(peer.current?.connections || {}).forEach(calls => {
                         calls.forEach(call => {
                             if (call.peerConnection) {
-                                const sender = call.peerConnection.getSenders()
-                                    .find(s => s.track && s.track.kind === 'video');
-                                if (sender) sender.replaceTrack(newTrack);
+                                const senders = call.peerConnection.getSenders();
+                                const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                                if (videoSender) {
+                                    videoSender.replaceTrack(newVideoTrack).catch(err => console.error('Error replace:', err));
+                                }
                             }
                         });
                     });
                     
-                    localStream.current.removeTrack(oldTrack);
-                    localStream.current.addTrack(newTrack);
-                    oldTrack.stop();
-                } catch(e) {}
+                    // Actualizar stream local
+                    localStream.current.removeTrack(oldVideoTrack);
+                    localStream.current.addTrack(newVideoTrack);
+                    oldVideoTrack.stop();
+                    
+                } catch(e) {
+                    console.error('Error cambiando cámara:', e);
+                }
             };
 
             if (!joined) return (
@@ -620,46 +598,28 @@
             return (
                 <div className={`guest-layout ${tally === 'live' ? 'tally-live' : tally === 'prev' ? 'tally-prev' : ''}`}>
                     <div className="guest-tally-border"></div>
-                    
-                    {/* Solo el tally, nada más arriba */}
                     <div className="big-tally-text">{tally === 'live' ? '● EN VIVO' : tally === 'prev' ? 'PREPARADO' : ''}</div>
                     
-                    {/* PIP Arrastrable */}
                     <DraggablePIP stream={returnStream} />
                     
-                    {/* Video propio */}
                     {localStream.current && (
                         <VideoPlayer 
                             stream={localStream.current} 
                             muted={true}
                             className="guest-video" 
-                            style={{
-                                transform: facingMode === 'user' ? 'scaleX(-1)' : 'none', 
-                                opacity: camOff ? 0.2 : 1
-                            }} 
+                            style={{transform: facingMode === 'user' ? 'scaleX(-1)' : 'none', opacity: camOff ? 0.2 : 1}} 
                         />
                     )}
                     
-                    {/* Controles */}
                     <div className="guest-overlay">
-                        <button 
-                            className={`mic-btn ${micMuted ? 'off' : ''}`} 
-                            onClick={() => {
-                                const t = localStream.current?.getAudioTracks()[0]; 
-                                if(t) {t.enabled = !t.enabled; setMicMuted(!t.enabled);}
-                            }}
-                        >
-                            {micMuted ? '🔇' : '🎤'}
-                        </button>
-                        <button 
-                            className={`mic-btn ${camOff ? 'off' : ''}`} 
-                            onClick={() => {
-                                const t = localStream.current?.getVideoTracks()[0]; 
-                                if(t) {t.enabled = !t.enabled; setCamOff(!t.enabled);}
-                            }}
-                        >
-                            {camOff ? '🚫' : '📷'}
-                        </button>
+                        <button className={`mic-btn ${micMuted ? 'off' : ''}`} onClick={() => {
+                            const t = localStream.current?.getAudioTracks()[0]; 
+                            if(t) {t.enabled = !t.enabled; setMicMuted(!t.enabled);}
+                        }}>{micMuted ? '🔇' : '🎤'}</button>
+                        <button className={`mic-btn ${camOff ? 'off' : ''}`} onClick={() => {
+                            const t = localStream.current?.getVideoTracks()[0]; 
+                            if(t) {t.enabled = !t.enabled; setCamOff(!t.enabled);}
+                        }}>{camOff ? '🚫' : '📷'}</button>
                         <button className="mic-btn" onClick={switchCamera} style={{background: '#3b82f6'}}>↻</button>
                     </div>
                 </div>
@@ -668,7 +628,7 @@
 
         const ObsView = ({ roomName, slotId }) => {
             const [stream, setStream] = useState(null);
-            const [status, setStatus] = useState('Conectando...');
+            const [status, setStatus] = useState('Iniciando...');
             const peer = useRef(null);
             const videoRef = useRef(null);
 
@@ -678,59 +638,34 @@
                 peer.current = new Peer(myId, PEER_CONFIG);
                 
                 peer.current.on('open', () => {
-                    setStatus('Esperando móvil...');
+                    setStatus('Esperando señal...');
                 });
                 
                 peer.current.on('call', (call) => {
                     setStatus('Recibiendo...');
-                    // Contestamos la llamada - no enviamos nada de vuelta
-                    call.answer(null);
+                    call.answer(); // Contestamos sin enviar nada
                     
                     call.on('stream', (remoteStream) => {
-                        console.log('Stream recibido:', remoteStream.getVideoTracks().length, 'video tracks');
                         if (remoteStream.getVideoTracks().length > 0) {
                             setStream(remoteStream);
                             setStatus('');
-                        } else {
-                            setStatus('Error: Sin video');
                         }
-                    });
-                    
-                    call.on('error', (err) => {
-                        setStatus('Error de llamada');
                     });
                 });
 
                 peer.current.on('error', (err) => {
-                    if (err.type !== 'unavailable-id') {
-                        setStatus('Error de conexión');
-                    }
+                    if (err.type !== 'unavailable-id') setStatus('Error');
                 });
                 
-                // Intentar conectar al guest para despertar la conexión (data connection)
-                const tryWakeGuest = () => {
-                    if (!stream && peer.current) {
-                        const conn = peer.current.connect(`sc_guest_${roomName}_${slotId}`);
-                        conn.on('open', () => conn.send('ping'));
-                    }
-                };
-                
-                const interval = setInterval(tryWakeGuest, 3000);
-                
-                return () => { 
-                    clearInterval(interval);
-                    peer.current?.destroy(); 
-                };
-            }, [roomName, slotId, stream]);
+                return () => peer.current?.destroy();
+            }, [roomName, slotId]);
 
             useEffect(() => {
                 if (stream && videoRef.current) {
                     videoRef.current.srcObject = stream;
-                    // Forzar play
                     videoRef.current.play().catch(e => {
-                        console.log("Autoplay blocked, trying muted...");
                         videoRef.current.muted = true;
-                        videoRef.current.play().catch(e2 => console.error("Cannot play:", e2));
+                        videoRef.current.play().catch(e2 => console.error("Cannot play"));
                     });
                 }
             }, [stream]);
@@ -738,12 +673,7 @@
             return (
                 <div className="obs-layout">
                     {stream ? (
-                        <video 
-                            ref={videoRef} 
-                            className="obs-video" 
-                            autoPlay 
-                            playsInline 
-                        ></video>
+                        <video ref={videoRef} className="obs-video" autoPlay playsInline></video>
                     ) : (
                         <div className="obs-status">{status}</div>
                     )}
@@ -784,7 +714,8 @@
             );
         };
         
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
