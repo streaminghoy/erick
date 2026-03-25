@@ -13,7 +13,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        body { background-color: #050505; color: white; font-family: Arial, sans-serif; margin: 0; padding: 0; height: 100vh; overflow: hidden; }
+        body { background-color: #050505; color: white; font-family: Arial, sans-serif; margin: 0; padding: 0; height: 100vh; overflow: hidden; touch-action: none; }
         .lobby-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: #0f172a; padding: 20px; text-align: center; }
         .glass-box { background: rgba(30, 41, 59, 0.8); padding: 40px; border-radius: 16px; max-width: 400px; width: 100%; border: 1px solid #334155; }
         input, select { width: 100%; background: #000; border: 2px solid #334155; color: white; padding: 15px; border-radius: 8px; font-size: 1rem; margin-bottom: 15px; text-align: center; }
@@ -40,7 +40,6 @@
         .t-btn.active-prev { background: rgba(34, 197, 94, 0.2); border-color: #22c55e; color: #22c55e; }
         .t-btn.active-live { background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #ef4444; }
         
-        /* Preview del Director (su propia cámara) */
         .director-preview { 
             position: fixed; 
             bottom: 20px; 
@@ -68,18 +67,15 @@
             padding: 2px;
         }
 
-        .guest-layout { width: 100vw; height: 100vh; position: relative; background: #000; }
+        .guest-layout { width: 100vw; height: 100vh; position: relative; background: #000; overflow: hidden; }
         .guest-video { width: 100%; height: 100%; object-fit: cover; }
         .guest-tally-border { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 15px solid transparent; pointer-events: none; z-index: 50; box-sizing: border-box; }
         .tally-live .guest-tally-border { border-color: #ef4444; box-shadow: inset 0 0 50px rgba(239,68,68,0.8); }
         .tally-prev .guest-tally-border { border-color: #22c55e; box-shadow: inset 0 0 50px rgba(34,197,94,0.8); }
         
+        /* PIP Mejorado - Movible y Redimensionable */
         .return-pip { 
             position: absolute; 
-            top: 20px; 
-            left: 20px; 
-            width: 240px; 
-            height: 180px; 
             background: #000; 
             border: 3px solid #3b82f6; 
             border-radius: 12px; 
@@ -87,9 +83,35 @@
             z-index: 80; 
             display: none;
             box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            touch-action: none; /* Prevenir scroll mientras arrastramos */
+            user-select: none;
         }
         .return-pip.active { display: block; }
-        .return-pip video { width: 100%; height: 100%; object-fit: cover; }
+        .return-pip video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+        
+        .pip-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            z-index: 2;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pip-header:active {
+            cursor: grabbing;
+        }
+        .pip-header::before {
+            content: '⋮⋮';
+            color: rgba(255,255,255,0.6);
+            font-size: 12px;
+            letter-spacing: 2px;
+        }
+        
         .pip-label { 
             position: absolute; 
             bottom: 0; 
@@ -97,14 +119,27 @@
             right: 0; 
             background: rgba(59, 130, 246, 0.9); 
             color: white; 
-            font-size: 12px; 
-            padding: 5px; 
+            font-size: 11px; 
+            padding: 4px; 
             text-align: center;
             font-weight: bold;
+            pointer-events: none;
+        }
+        
+        .pip-resize-handle {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 25px;
+            height: 25px;
+            cursor: se-resize;
+            z-index: 3;
+            background: linear-gradient(135deg, transparent 40%, #3b82f6 40%);
+            border-bottom-right-radius: 8px;
         }
         
         .guest-overlay { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 12px 25px; border-radius: 50px; display: flex; gap: 15px; z-index: 100; border: 1px solid #334155; }
-        .mic-btn { width: 50px; height: 50px; border-radius: 50%; border: none; background: #334155; color: white; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .mic-btn { width: 50px; height: 50px; border-radius: 50%; border: none; background: #334155; color: white; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center; touch-action: manipulation; }
         .mic-btn.off { background: #ef4444; }
         
         .big-tally-text { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); font-size: 1.5rem; font-weight: bold; padding: 10px 20px; border-radius: 10px; display: none; z-index: 100; background: rgba(0,0,0,0.7); }
@@ -120,7 +155,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useCallback } = React;
         
         const PEER_CONFIG = { 
             config: { 
@@ -137,7 +172,7 @@
         
         const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
         
-        const VideoPlayer = ({ stream, muted, className }) => {
+        const VideoPlayer = ({ stream, muted, className, style }) => {
             const videoRef = useRef(null);
             useEffect(() => {
                 if (videoRef.current && stream) {
@@ -145,7 +180,7 @@
                     videoRef.current.play().catch(e => console.log("Play error:", e));
                 }
             }, [stream]);
-            return <video ref={videoRef} className={className} autoPlay playsInline muted={muted}></video>;
+            return <video ref={videoRef} className={className} style={style} autoPlay playsInline muted={muted}></video>;
         };
 
         const VUMeter = ({ stream }) => {
@@ -174,6 +209,102 @@
             return <div className="vu-meter-container"><div ref={barRef} className="vu-meter-bar" style={{ width: '0%' }}></div></div>;
         };
 
+        // Componente PIP Movible y Redimensionable
+        const DraggablePIP = ({ stream }) => {
+            const [pos, setPos] = useState({ x: 20, y: 20 });
+            const [size, setSize] = useState({ width: 240, height: 180 });
+            const [dragging, setDragging] = useState(false);
+            const [resizing, setResizing] = useState(false);
+            const dragStart = useRef({ x: 0, y: 0 });
+            const posStart = useRef({ x: 0, y: 0 });
+            const sizeStart = useRef({ width: 0, height: 0 });
+
+            const handleStart = useCallback((e, type) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                
+                if (type === 'drag') {
+                    setDragging(true);
+                    dragStart.current = { x: clientX, y: clientY };
+                    posStart.current = { ...pos };
+                } else {
+                    setResizing(true);
+                    dragStart.current = { x: clientX, y: clientY };
+                    sizeStart.current = { ...size };
+                }
+            }, [pos, size]);
+
+            const handleMove = useCallback((e) => {
+                if (!dragging && !resizing) return;
+                e.preventDefault();
+                
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                if (dragging) {
+                    const newX = Math.max(0, Math.min(window.innerWidth - size.width, 
+                        posStart.current.x + (clientX - dragStart.current.x)));
+                    const newY = Math.max(0, Math.min(window.innerHeight - size.height - 100, // -100 para no tapar controles
+                        posStart.current.y + (clientY - dragStart.current.y)));
+                    setPos({ x: newX, y: newY });
+                } else if (resizing) {
+                    const deltaX = clientX - dragStart.current.x;
+                    const newWidth = Math.max(160, Math.min(window.innerWidth - pos.x - 20, sizeStart.current.width + deltaX));
+                    const newHeight = Math.max(120, newWidth * 0.75); // Mantener 4:3
+                    setSize({ width: newWidth, height: newHeight });
+                }
+            }, [dragging, resizing, pos.x, size.width]);
+
+            const handleEnd = useCallback(() => {
+                setDragging(false);
+                setResizing(false);
+            }, []);
+
+            useEffect(() => {
+                if (dragging || resizing) {
+                    window.addEventListener('mousemove', handleMove, { passive: false });
+                    window.addEventListener('mouseup', handleEnd);
+                    window.addEventListener('touchmove', handleMove, { passive: false });
+                    window.addEventListener('touchend', handleEnd);
+                    return () => {
+                        window.removeEventListener('mousemove', handleMove);
+                        window.removeEventListener('mouseup', handleEnd);
+                        window.removeEventListener('touchmove', handleMove);
+                        window.removeEventListener('touchend', handleEnd);
+                    };
+                }
+            }, [dragging, resizing, handleMove, handleEnd]);
+
+            if (!stream) return null;
+
+            return (
+                <div 
+                    className="return-pip active"
+                    style={{
+                        left: pos.x,
+                        top: pos.y,
+                        width: size.width,
+                        height: size.height
+                    }}
+                >
+                    <div 
+                        className="pip-header"
+                        onMouseDown={(e) => handleStart(e, 'drag')}
+                        onTouchStart={(e) => handleStart(e, 'drag')}
+                    />
+                    <VideoPlayer stream={stream} muted={false} />
+                    <div className="pip-label">📹 RETORNO DIRECTOR</div>
+                    <div 
+                        className="pip-resize-handle"
+                        onMouseDown={(e) => handleStart(e, 'resize')}
+                        onTouchStart={(e) => handleStart(e, 'resize')}
+                    />
+                </div>
+            );
+        };
+
         const DirectorView = ({ roomName }) => {
             const [slots, setSlots] = useState({ 
                 1: { connected: false, tally: 'idle', stream: null }, 
@@ -181,11 +312,43 @@
                 3: { connected: false, tally: 'idle', stream: null } 
             });
             const [talkbackActive, setTalkbackActive] = useState(false);
-            const [localStream, setLocalStream] = useState(null); // Stream del director (video+audio)
+            const [localStream, setLocalStream] = useState(null);
+            const [logs, setLogs] = useState([]);
             
             const peer = useRef(null);
             const mqttClient = useRef(null);
             const returnCallsRef = useRef({});
+
+            const addLog = (msg) => {
+                console.log(msg);
+                setLogs(prev => [...prev.slice(-4), msg]);
+            };
+
+            // Efecto para enviar retorno a nuevos guests conectados
+            useEffect(() => {
+                if (!talkbackActive || !localStream) return;
+                
+                [1,2,3].forEach(slotId => {
+                    if (slots[slotId].connected && !returnCallsRef.current[slotId]) {
+                        addLog(`📞 Llamando a slot ${slotId} para retorno...`);
+                        try {
+                            const returnCall = peer.current.call(`sc_guest_${roomName}_${slotId}`, localStream);
+                            returnCallsRef.current[slotId] = returnCall;
+                            
+                            returnCall.on('close', () => {
+                                addLog(`🔚 Retorno cerrado slot ${slotId}`);
+                                delete returnCallsRef.current[slotId];
+                            });
+                            
+                            returnCall.on('error', (err) => {
+                                addLog(`❌ Error retorno slot ${slotId}: ${err.message}`);
+                            });
+                        } catch(e) {
+                            addLog(`❌ Error al llamar: ${e.message}`);
+                        }
+                    }
+                });
+            }, [slots, talkbackActive, localStream, roomName]);
 
             useEffect(() => {
                 mqttClient.current = mqtt.connect(MQTT_BROKER);
@@ -204,11 +367,14 @@
                     const match = call.peer.match(/_(\d+)$/);
                     if (match) {
                         const slotId = match[1];
+                        addLog(`📱 Slot ${slotId} llamando...`);
                         call.answer(); 
                         call.on('stream', (stream) => {
+                            addLog(`✅ Slot ${slotId} conectado`);
                             setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], connected: true, stream: stream } }));
                         });
                         call.on('close', () => {
+                            addLog(`🔚 Slot ${slotId} desconectado`);
                             setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], connected: false, stream: null } }));
                         });
                     }
@@ -228,33 +394,33 @@
 
             const toggleReturnAll = async () => {
                 if (talkbackActive) {
-                    // Cortar IFB
                     Object.values(returnCallsRef.current).forEach(call => call?.close());
                     localStream?.getTracks().forEach(t => t.stop());
                     setLocalStream(null);
                     setTalkbackActive(false);
                     returnCallsRef.current = {};
+                    addLog('🔴 Retorno detenido');
                 } else {
                     try {
-                        // IMPORTANTE: Pedir VIDEO y AUDIO del director
                         const s = await navigator.mediaDevices.getUserMedia({ 
                             audio: true, 
-                            video: { width: 640, height: 480 } // Video del director para el retorno
+                            video: { width: 640, height: 480 }
                         });
                         setLocalStream(s);
                         setTalkbackActive(true);
+                        addLog('🟢 Retorno iniciado - Cámara OK');
                         
-                        // Enviar a todos los móviles conectados
+                        // Llamar inmediatamente a los que ya están conectados
                         [1,2,3].forEach(slotId => {
                             if (slots[slotId].connected) {
-                                console.log(`Enviando video+audio a slot ${slotId}`);
+                                addLog(`📞 Llamando a slot ${slotId}...`);
                                 const returnCall = peer.current.call(`sc_guest_${roomName}_${slotId}`, s);
                                 returnCallsRef.current[slotId] = returnCall;
                             }
                         });
                     } catch(e) { 
-                        alert("Error accediendo a cámara/micrófono: " + e.message);
-                        console.error(e);
+                        alert("Error accediendo a cámara: " + e.message);
+                        addLog(`❌ Error: ${e.message}`);
                     }
                 }
             };
@@ -270,7 +436,10 @@
                     <div className="director-header">
                         <div>
                             <h2 style={{color: '#3b82f6', margin: 0}}>StreamCall MUNDIAL</h2>
-                            <span style={{color: '#94a3b8', fontSize: '0.8rem'}}>SALA: {roomName} | TURN: 140.82.25.249</span>
+                            <span style={{color: '#94a3b8', fontSize: '0.8rem'}}>SALA: {roomName}</span>
+                            <div style={{fontSize: '0.7rem', color: '#64748b', marginTop: '5px'}}>
+                                {logs.map((l, i) => <div key={i}>{l}</div>)}
+                            </div>
                         </div>
                         <button 
                             className={talkbackActive ? 'btn btn-red' : 'btn'} 
@@ -281,7 +450,6 @@
                         </button>
                     </div>
                     
-                    {/* Preview de la cámara del Director */}
                     <div className={`director-preview ${localStream ? 'active' : ''}`}>
                         {localStream && <VideoPlayer stream={localStream} muted={true} />}
                         <div className="director-preview-label">TU CÁMARA (ENVIANDO)</div>
@@ -330,20 +498,26 @@
             const [tally, setTally] = useState('idle');
             const [micMuted, setMicMuted] = useState(false);
             const [camOff, setCamOff] = useState(false);
-            const [returnStream, setReturnStream] = useState(null); // Stream del director (video+audio)
+            const [returnStream, setReturnStream] = useState(null);
             const [facingMode, setFacingMode] = useState('environment');
             const [status, setStatus] = useState('Conectando...');
+            const [debug, setDebug] = useState([]);
             
             const peer = useRef(null);
             const mqttClient = useRef(null);
             const localStream = useRef(null);
+            const hasReturnRef = useRef(false);
+
+            const addDebug = (msg) => {
+                console.log(msg);
+                setDebug(prev => [...prev.slice(-2), msg]);
+            };
 
             useEffect(() => {
                 if (!joined) return;
                 
                 setStatus('Iniciando...');
                 
-                // MQTT
                 mqttClient.current = mqtt.connect(MQTT_BROKER);
                 mqttClient.current.on('connect', () => {
                     mqttClient.current.subscribe(`sc_tally/${roomName}/${slotId}`);
@@ -353,51 +527,56 @@
                     if (data.state) setTally(data.state);
                 });
                 
-                // WebRTC
                 const init = async () => {
                     try {
-                        setStatus('Pidiendo cámara...');
+                        addDebug('Pidiendo cámara...');
                         const s = await navigator.mediaDevices.getUserMedia({ 
                             video: { width: 1280, height: 720, facingMode: facingMode }, 
                             audio: { echoCancellation: true, noiseSuppression: true } 
                         });
                         localStream.current = s;
-                        setStatus('Cámara OK - Conectando...');
+                        addDebug('Cámara OK');
                         
                         const myId = `sc_guest_${roomName}_${slotId}`;
                         peer.current = new Peer(myId, PEER_CONFIG);
                         
-                        peer.current.on('open', () => {
-                            setStatus('Enviando a Director y OBS...');
-                            
-                            // Enviar a Director
-                            peer.current.call(`sc_dir_${roomName}`, s);
-                            
-                            // Enviar a OBS
-                            peer.current.call(`sc_obs_${roomName}_${slotId}`, s);
-                            
-                            setStatus('✅ EN VIVO');
-                        });
-                        
-                        // RECIBIR LLAMADA DEL DIRECTOR (Video + Audio de retorno)
+                        // IMPORTANTE: Registrar el listener 'call' ANTES de que el peer esté listo
                         peer.current.on('call', (call) => {
-                            console.log('Recibiendo retorno del Director...');
-                            setStatus('Recibiendo retorno...');
-                            
-                            // IMPORTANTE: Contestar sin enviar nuestro stream de vuelta (ya lo enviamos arriba)
+                            addDebug('📞 Recibiendo llamada...');
+                            // No enviamos nuestro stream de vuelta, solo recibimos
                             call.answer(); 
                             
                             call.on('stream', (remoteStream) => { 
-                                console.log('Retorno recibido:', remoteStream.getVideoTracks().length, 'video tracks');
+                                addDebug(`✅ Retorno recibido! Tracks: V${remoteStream.getVideoTracks().length} A${remoteStream.getAudioTracks().length}`);
                                 setReturnStream(remoteStream);
+                                hasReturnRef.current = true;
                                 setStatus('✅ EN VIVO + RETORNO');
                             });
                             
-                            call.on('error', (err) => console.error('Error retorno:', err));
+                            call.on('error', (err) => {
+                                addDebug(`❌ Error: ${err.message}`);
+                            });
+                            
+                            call.on('close', () => {
+                                addDebug('🔚 Retorno cerrado');
+                                setReturnStream(null);
+                            });
                         });
 
+                        peer.current.on('open', (id) => {
+                            addDebug('Peer listo: ' + id);
+                            setStatus('Enviando...');
+                            
+                            // Enviar a Director
+                            peer.current.call(`sc_dir_${roomName}`, s);
+                            addDebug('Llamando a director...');
+                            
+                            // Enviar a OBS
+                            peer.current.call(`sc_obs_${roomName}_${slotId}`, s);
+                        });
+                        
                         peer.current.on('error', (err) => {
-                            console.error('Peer error:', err);
+                            addDebug('Error Peer: ' + err.type);
                             setStatus('Error: ' + err.type);
                         });
                         
@@ -450,7 +629,7 @@
                         <p style={{color: '#94a3b8'}}>Sala: {roomName}</p>
                         <div style={{background: '#facc15', color: '#000', padding: '10px', borderRadius: '5px', fontSize: '0.8rem', marginBottom: '15px'}}>
                             ⚠️ Mantené la pantalla ENCENDIDA<br/>
-                            ⚠️ Usá Chrome<br/>
+                            ⚠️ Arrastrá el video del director desde la parte de arriba<br/>
                             <small>TURN: 140.82.25.249</small>
                         </div>
                         <select style={{width: '100%', padding: '10px', marginBottom: '15px'}}>
@@ -467,22 +646,14 @@
                     <div className="guest-tally-border"></div>
                     <div className="big-tally-text">{tally === 'live' ? '● EN VIVO' : tally === 'prev' ? 'PREPARADO' : ''}</div>
                     
-                    <div style={{position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.7)', padding: '5px 10px', borderRadius: '5px', fontSize: '0.8rem', zIndex: 100, color: returnStream ? '#22c55e' : '#94a3b8'}}>
-                        {status}
+                    <div style={{position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.7)', padding: '5px 10px', borderRadius: '5px', fontSize: '0.7rem', zIndex: 100, maxWidth: '200px'}}>
+                        <div style={{color: returnStream ? '#22c55e' : '#94a3b8'}}>{status}</div>
+                        {debug.map((d,i) => <div key={i} style={{color:'#64748b', fontSize:'0.6rem'}}>{d}</div>)}
                     </div>
                     
-                    {/* RETORNO DEL DIRECTOR - Video + Audio */}
-                    <div className={`return-pip ${returnStream ? 'active' : ''}`}>
-                        {returnStream && (
-                            <VideoPlayer 
-                                stream={returnStream} 
-                                muted={false}  // IMPORTANTE: Escuchar audio del director
-                            />
-                        )}
-                        <div className="pip-label">📹 RETORNO DIRECTOR</div>
-                    </div>
+                    {/* PIP Movible y Redimensionable */}
+                    <DraggablePIP stream={returnStream} />
                     
-                    {/* Video propio del reportero */}
                     {localStream.current && (
                         <VideoPlayer 
                             stream={localStream.current} 
