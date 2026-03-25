@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>StreamCall - Final Fix</title>
+    <title>StreamCall - Stable Fix</title>
     
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -196,8 +196,7 @@
                 ],
                 iceTransportPolicy: 'all',
                 iceCandidatePoolSize: 10
-            },
-            debug: 0
+            }
         };
         
         const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
@@ -339,17 +338,28 @@
             const mqttClient = useRef(null);
             const returnCallsRef = useRef({});
 
+            // Efecto para enviar retorno cuando hay nuevos slots conectados
             useEffect(() => {
                 if (!talkbackActive || !localStream) return;
                 
                 [1,2,3].forEach(slotId => {
                     if (slots[slotId].connected && !returnCallsRef.current[slotId]) {
                         try {
+                            console.log(`Enviando retorno a slot ${slotId}`);
                             const returnCall = peer.current.call(`sc_guest_${roomName}_${slotId}`, localStream);
                             returnCallsRef.current[slotId] = returnCall;
-                            returnCallsRef.current[slotId] = returnCall;
-                            returnCall.on('close', () => delete returnCallsRef.current[slotId]);
-                        } catch(e) {}
+                            
+                            returnCall.on('close', () => {
+                                console.log(`Retorno cerrado slot ${slotId}`);
+                                delete returnCallsRef.current[slotId];
+                            });
+                            
+                            returnCall.on('error', (err) => {
+                                console.error(`Error retorno slot ${slotId}:`, err);
+                            });
+                        } catch(e) {
+                            console.error('Error iniciando retorno:', e);
+                        }
                     }
                 });
             }, [slots, talkbackActive, localStream, roomName]);
@@ -373,8 +383,10 @@
                     const match = call.peer.match(/_(\d+)$/);
                     if (match) {
                         const slotId = match[1];
+                        console.log(`Llamada entrante de slot ${slotId}`);
                         call.answer();
                         call.on('stream', (stream) => {
+                            console.log(`Stream recibido de slot ${slotId}`);
                             setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], connected: true, stream: stream } }));
                         });
                         call.on('close', () => {
@@ -397,11 +409,16 @@
 
             const toggleReturnAll = async () => {
                 if (talkbackActive) {
-                    Object.values(returnCallsRef.current).forEach(call => call?.close());
+                    // Cerrar todas las llamadas de retorno
+                    Object.values(returnCallsRef.current).forEach(call => {
+                        try { call.close(); } catch(e) {}
+                    });
+                    returnCallsRef.current = {};
+                    
+                    // Detener stream local
                     localStream?.getTracks().forEach(t => t.stop());
                     setLocalStream(null);
                     setTalkbackActive(false);
-                    returnCallsRef.current = {};
                 } else {
                     try {
                         const s = await navigator.mediaDevices.getUserMedia({ 
@@ -410,7 +427,10 @@
                         });
                         setLocalStream(s);
                         setTalkbackActive(true);
-                    } catch(e) { alert("Error: " + e.message); }
+                        console.log('Retorno iniciado, enviando a slots conectados...');
+                    } catch(e) { 
+                        alert("Error accediendo a cámara: " + e.message);
+                    }
                 }
             };
 
@@ -483,7 +503,8 @@
             const peer = useRef(null);
             const mqttClient = useRef(null);
             const localStream = useRef(null);
-            const obsInterval = useRef(null);
+            const obsCallRef = useRef(null); // Guardar referencia a la llamada OBS
+            const dirCallRef = useRef(null); // Guardar referencia a la llamada Director
 
             useEffect(() => {
                 if (!joined) return;
@@ -510,29 +531,51 @@
                         const myId = `sc_guest_${roomName}_${slotId}`;
                         peer.current = new Peer(myId, PEER_CONFIG);
                         
+                        // Escuchar retorno del director
                         peer.current.on('call', (call) => {
-                            call.answer();
+                            console.log('Llamada entrante (retorno):', call.peer);
+                            call.answer(); // No enviamos nada, solo recibimos
                             call.on('stream', (remoteStream) => { 
+                                console.log('Retorno recibido');
                                 setReturnStream(remoteStream);
                             });
                         });
 
                         peer.current.on('open', () => {
-                            // Conectar a Director inmediatamente
-                            peer.current.call(`sc_dir_${roomName}`, s);
+                            console.log('Peer abierto, conectando...');
                             
-                            // Conectar a OBS con reintentos agresivos
-                            const tryObs = () => {
-                                try {
-                                    peer.current.call(`sc_obs_${roomName}_${slotId}`, s);
-                                } catch(e) {}
+                            // Llamar a Director (solo una vez, se mantiene)
+                            if (!dirCallRef.current) {
+                                dirCallRef.current = peer.current.call(`sc_dir_${roomName}`, s);
+                            }
+                            
+                            // Función para verificar y llamar a OBS
+                            const ensureObsConnection = () => {
+                                const obsId = `sc_obs_${roomName}_${slotId}`;
+                                
+                                // Verificar si ya hay una llamada abierta a OBS
+                                const connections = peer.current.connections[obsId];
+                                const hasOpenCall = connections && connections.some(c => 
+                                    c.type === 'media' && c.open && !c.closed
+                                );
+                                
+                                if (!hasOpenCall) {
+                                    console.log('Llamando a OBS...');
+                                    obsCallRef.current = peer.current.call(obsId, s);
+                                }
                             };
                             
-                            tryObs();
-                            obsInterval.current = setInterval(tryObs, 1500);
+                            // Llamar inmediatamente y revisar cada 3 segundos
+                            ensureObsConnection();
+                            const interval = setInterval(ensureObsConnection, 3000);
+                            
+                            // Guardar referencia para limpiar
+                            window.obsInterval = interval;
                         });
                         
-                        peer.current.on('error', (err) => console.error('Peer error:', err.type));
+                        peer.current.on('error', (err) => {
+                            console.error('Peer error:', err.type);
+                        });
                         
                     } catch (e) { 
                         alert("Error de cámara: " + e.message); 
@@ -541,47 +584,62 @@
                 init();
                 
                 return () => { 
-                    clearInterval(obsInterval.current);
+                    clearInterval(window.obsInterval);
                     peer.current?.destroy(); 
                     mqttClient.current?.end(); 
                     localStream.current?.getTracks().forEach(t => t.stop());
                 };
-            }, [joined, roomName, slotId, facingMode]);
+            }, [joined, roomName, slotId]);
 
             const switchCamera = async () => {
                 const next = facingMode === 'user' ? 'environment' : 'user';
-                setFacingMode(next);
                 
                 try {
-                    // FIX CRÍTICO: Pedir SOLO video, mantener audio existente
+                    // IMPORTANTE: Obtener NUEVO stream antes de tocar el viejo
                     const newStream = await navigator.mediaDevices.getUserMedia({ 
                         video: { facingMode: next }, 
-                        audio: false // NO pedir audio aquí
+                        audio: false // NO pedir audio, mantener el track de audio existente
                     });
                     
                     const newVideoTrack = newStream.getVideoTracks()[0];
                     const oldVideoTrack = localStream.current.getVideoTracks()[0];
                     
-                    // Reemplazar en todas las conexiones PeerJS
-                    Object.values(peer.current?.connections || {}).forEach(calls => {
-                        calls.forEach(call => {
-                            if (call.peerConnection) {
-                                const senders = call.peerConnection.getSenders();
-                                const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-                                if (videoSender) {
-                                    videoSender.replaceTrack(newVideoTrack).catch(err => console.error('Error replace:', err));
-                                }
-                            }
-                        });
-                    });
+                    if (!newVideoTrack) {
+                        throw new Error('No se pudo obtener nueva pista de video');
+                    }
                     
-                    // Actualizar stream local
+                    // 1. Reemplazar en todas las conexiones PeerJS existentes
+                    if (peer.current) {
+                        Object.values(peer.current.connections).forEach(calls => {
+                            calls.forEach(call => {
+                                if (call.peerConnection && call.open) {
+                                    const senders = call.peerConnection.getSenders();
+                                    const videoSender = senders.find(s => 
+                                        s.track && s.track.kind === 'video'
+                                    );
+                                    if (videoSender) {
+                                        videoSender.replaceTrack(newVideoTrack)
+                                            .then(() => console.log('Track reemplazado OK'))
+                                            .catch(err => console.error('Error replaceTrack:', err));
+                                    }
+                                }
+                            });
+                        });
+                    }
+                    
+                    // 2. Reemplazar en el stream local (sin tocar el audio)
                     localStream.current.removeTrack(oldVideoTrack);
                     localStream.current.addTrack(newVideoTrack);
+                    
+                    // 3. Ahora sí, detener el track viejo
                     oldVideoTrack.stop();
+                    
+                    // 4. Actualizar estado
+                    setFacingMode(next);
                     
                 } catch(e) {
                     console.error('Error cambiando cámara:', e);
+                    alert('Error al cambiar cámara: ' + e.message);
                 }
             };
 
@@ -631,6 +689,7 @@
             const [status, setStatus] = useState('Iniciando...');
             const peer = useRef(null);
             const videoRef = useRef(null);
+            const hasReceivedStream = useRef(false);
 
             useEffect(() => {
                 const myId = `sc_obs_${roomName}_${slotId}`;
@@ -638,23 +697,45 @@
                 peer.current = new Peer(myId, PEER_CONFIG);
                 
                 peer.current.on('open', () => {
-                    setStatus('Esperando señal...');
+                    setStatus('Esperando móvil...');
                 });
                 
                 peer.current.on('call', (call) => {
-                    setStatus('Recibiendo...');
-                    call.answer(); // Contestamos sin enviar nada
+                    console.log('Llamada entrante en OBS');
+                    
+                    // Contestar sin enviar nada (null puede causar problemas en algunos navegadores)
+                    call.answer();
                     
                     call.on('stream', (remoteStream) => {
-                        if (remoteStream.getVideoTracks().length > 0) {
+                        // Evitar múltiples renders si ya recibimos el stream
+                        if (hasReceivedStream.current) return;
+                        
+                        const videoTracks = remoteStream.getVideoTracks();
+                        console.log('Stream recibido, video tracks:', videoTracks.length);
+                        
+                        if (videoTracks.length > 0) {
+                            hasReceivedStream.current = true;
                             setStream(remoteStream);
                             setStatus('');
                         }
                     });
+                    
+                    call.on('close', () => {
+                        console.log('Llamada cerrada');
+                        hasReceivedStream.current = false;
+                        setStream(null);
+                        setStatus('Desconectado');
+                    });
+                    
+                    call.on('error', (err) => {
+                        console.error('Error en llamada:', err);
+                    });
                 });
 
                 peer.current.on('error', (err) => {
-                    if (err.type !== 'unavailable-id') setStatus('Error');
+                    if (err.type !== 'unavailable-id') {
+                        setStatus('Error de conexión');
+                    }
                 });
                 
                 return () => peer.current?.destroy();
@@ -664,8 +745,9 @@
                 if (stream && videoRef.current) {
                     videoRef.current.srcObject = stream;
                     videoRef.current.play().catch(e => {
+                        console.log('Autoplay blocked, trying muted...');
                         videoRef.current.muted = true;
-                        videoRef.current.play().catch(e2 => console.error("Cannot play"));
+                        videoRef.current.play().catch(e2 => console.error('Cannot play:', e2));
                     });
                 }
             }, [stream]);
@@ -673,7 +755,7 @@
             return (
                 <div className="obs-layout">
                     {stream ? (
-                        <video ref={videoRef} className="obs-video" autoPlay playsInline></video>
+                        <video ref={videoRef} className="obs-video" autoPlay playsInline muted={false}></video>
                     ) : (
                         <div className="obs-status">{status}</div>
                     )}
